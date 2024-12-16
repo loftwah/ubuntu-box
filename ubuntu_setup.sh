@@ -95,6 +95,10 @@ echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
 echo "Installing Python tools..."
 pip3 install --no-cache-dir poetry pipenv virtualenv
 
+# Install uv
+echo "Installing uv..."
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
 # Add TypeScript globally via Bun
 echo "Installing TypeScript..."
 bun add -g typescript ts-node
