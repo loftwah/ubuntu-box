@@ -17,19 +17,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LC_ALL=C.UTF-8 \
     TZ=UTC
 
-# Get tools from official images
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
-COPY --from=node:20 /usr/local/bin/node /usr/local/bin/
-COPY --from=node:20 /usr/local/lib/node_modules /usr/local/lib/node_modules
-COPY --from=oven/bun:latest /usr/local/bin/bun /usr/local/bin/
-COPY --from=golang:1.23 /usr/local/go /usr/local/go
-COPY --from=rust:latest /usr/local/cargo /usr/local/cargo
-COPY --from=rust:latest /usr/lib/x86_64-linux-gnu/libc.* /usr/lib/x86_64-linux-gnu/
-COPY --from=rust:latest /lib/x86_64-linux-gnu/libc.* /lib/x86_64-linux-gnu/
-COPY --from=ruby:3.3 /usr/local/bin/ruby /usr/local/bin/
-COPY --from=ruby:3.3 /usr/local/lib/ruby /usr/local/lib/ruby
-
-# Install essential tools
+# Install essential tools first
 RUN apt update && apt install -y --no-install-recommends \
     curl wget build-essential git vim nano lynis fail2ban \
     sysstat auditd rkhunter acct aide libssl-dev \
@@ -37,6 +25,20 @@ RUN apt update && apt install -y --no-install-recommends \
     gnupg lsb-release software-properties-common \
     python3-pip python3-dev libffi-dev libyaml-dev python3.12-venv \
     && apt clean && rm -rf /var/lib/apt/lists/*
+
+# Get tools from official images
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=node:20 /usr/local/bin/node /usr/local/bin/
+COPY --from=node:20 /usr/local/lib/node_modules /usr/local/lib/node_modules
+COPY --from=oven/bun:latest /usr/local/bin/bun /usr/local/bin/
+COPY --from=golang:1.23 /usr/local/go /usr/local/go
+COPY --from=rust:latest /usr/local/cargo /usr/local/cargo
+COPY --from=rust:latest /usr/local/rustup /usr/local/rustup
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
+COPY --from=ruby:3.3 /usr/local/bin/ruby /usr/local/bin/
+COPY --from=ruby:3.3 /usr/local/lib/ruby /usr/local/lib/ruby
 
 # Create non-root user and setup directories
 RUN useradd -m -s /bin/bash appuser \
