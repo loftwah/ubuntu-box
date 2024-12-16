@@ -11,7 +11,7 @@ BOLD='\033[1m'
 # Function to check command existence
 check_command() {
     if command -v "$1" &> /dev/null; then
-        echo -e "${GREEN}✓${NC} $1 is installed$(command -v "$1")"
+        echo -e "${GREEN}✓${NC} $1 is installed $(command -v "$1")"
         return 0
     else
         echo -e "${RED}✗${NC} $1 is not installed"
@@ -29,7 +29,7 @@ test_command() {
     else
         echo -e "${RED}✗${NC} $name test failed"
         return 1
-    }
+    fi
 }
 
 echo -e "${BOLD}Verifying installed tools...${NC}"
