@@ -87,6 +87,8 @@ rm go1.23.4.linux-amd64.tar.gz
 
 # Install Python tools
 echo "Installing Python tools..."
+python3 -m venv /usr/local/venv
+. /usr/local/venv/bin/activate
 pip3 install --no-cache-dir poetry pipenv virtualenv
 
 # Install uv
