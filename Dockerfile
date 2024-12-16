@@ -39,6 +39,10 @@ ENV RUSTUP_HOME=/usr/local/rustup \
     PATH=/usr/local/cargo/bin:$PATH
 COPY --from=ruby:3.3 /usr/local/bin/ruby /usr/local/bin/
 COPY --from=ruby:3.3 /usr/local/lib/ruby /usr/local/lib/ruby
+COPY --from=ruby:3.3 /usr/local/bundle /usr/local/bundle
+ENV GEM_HOME=/usr/local/bundle \
+    BUNDLE_APP_CONFIG=/usr/local/bundle \
+    PATH=/usr/local/bundle/bin:/usr/local/lib/ruby/gems/3.3.0/bin:$PATH
 
 # Create non-root user and setup directories
 RUN useradd -m -s /bin/bash appuser \
