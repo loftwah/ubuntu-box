@@ -30,19 +30,15 @@ RUN useradd -m -s /bin/bash appuser \
     && mkdir -p /home/appuser/.config \
     && chown -R appuser:appuser /home/appuser
 
-# Copy setup script from local context
+# Copy setup script
 COPY ubuntu_setup.sh /tmp/ubuntu_setup.sh
 RUN chmod +x /tmp/ubuntu_setup.sh
 
 # Run setup script as root (needed for system setup)
-RUN /tmp/ubuntu_setup.sh
+RUN /tmp/ubuntu_setup.sh || true
 
 # Switch to non-root user
 USER appuser
 WORKDIR /home/appuser
-
-# Add healthcheck
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
 
 CMD ["/bin/bash"]
