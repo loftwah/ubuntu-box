@@ -55,41 +55,36 @@ net.ipv4.conf.all.secure_redirects = 0
 net.ipv4.conf.default.secure_redirects = 0
 EOF
 
-# Install NVM for Node.js and Bun
-echo "Installing Node.js via NVM and Bun..."
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.4/install.sh | bash
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-nvm install --lts
-nvm use --lts
+# Set up NVM and Node.js for the appuser
+echo "Installing Node.js via NVM..."
+su - appuser -c 'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.4/install.sh | bash'
+su - appuser -c '. ~/.nvm/nvm.sh && nvm install --lts && nvm use --lts'
 
 # Install Bun
-curl -fsSL https://bun.sh/install | bash
+echo "Installing Bun..."
+su - appuser -c 'curl -fsSL https://bun.sh/install | bash'
 
-# Install Rust
+# Install Rust for appuser
 echo "Installing Rust..."
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-source "$HOME/.cargo/env"
+su - appuser -c 'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y'
+su - appuser -c 'source "$HOME/.cargo/env"'
 
-# Install Ruby via rbenv
+# Install Ruby via rbenv for appuser
 echo "Installing Ruby via rbenv..."
-git clone https://github.com/rbenv/rbenv.git ~/.rbenv
-cd ~/.rbenv && src/configure && make -C src
-export PATH="$HOME/.rbenv/bin:$PATH"
-eval "$(rbenv init -)"
-
-git clone https://github.com/rbenv/ruby-build.git ~/.rbenv/plugins/ruby-build
-RUBY_VERSION="3.3.6"
-rbenv install "$RUBY_VERSION"
-rbenv global "$RUBY_VERSION"
+su - appuser -c 'git clone https://github.com/rbenv/rbenv.git ~/.rbenv'
+su - appuser -c 'cd ~/.rbenv && src/configure && make -C src'
+su - appuser -c 'export PATH="$HOME/.rbenv/bin:$PATH" && eval "$(~/.rbenv/bin/rbenv init -)" && \
+    git clone https://github.com/rbenv/ruby-build.git ~/.rbenv/plugins/ruby-build && \
+    rbenv install 3.3.6 && rbenv global 3.3.6'
 
 # Install Go
 echo "Installing Go..."
 wget https://go.dev/dl/go1.23.4.linux-amd64.tar.gz
 tar -C /usr/local -xzf go1.23.4.linux-amd64.tar.gz
 rm go1.23.4.linux-amd64.tar.gz
-echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.profile
-echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
+echo 'export PATH=$PATH:/usr/local/go/bin' >> /home/appuser/.profile
+echo 'export PATH=$PATH:/usr/local/go/bin' >> /home/appuser/.bashrc
+chown -R appuser:appuser /home/appuser/.profile /home/appuser/.bashrc
 
 # Install Python tools
 echo "Installing Python tools..."
@@ -101,7 +96,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Add TypeScript globally via Bun
 echo "Installing TypeScript..."
-bun add -g typescript ts-node
+su - appuser -c '. ~/.bashrc && bun add -g typescript ts-node'
 
 # Cleanup
 echo "Cleaning up..."
@@ -109,15 +104,19 @@ apt autoremove -y
 apt clean
 rm -rf /var/lib/apt/lists/*
 
-# Set environment variables
-echo 'export PATH="$HOME/.rbenv/bin:$PATH"' >> ~/.bashrc
-echo 'eval "$(rbenv init -)"' >> ~/.bashrc
-echo 'export PATH="$PATH:/usr/local/go/bin"' >> ~/.bashrc
-echo 'export BUN_INSTALL="$HOME/.bun"' >> ~/.bashrc
-echo 'export PATH="$BUN_INSTALL/bin:$PATH"' >> ~/.bashrc
-echo 'source $HOME/.cargo/env' >> ~/.bashrc
-echo 'export NVM_DIR="$HOME/.nvm"' >> ~/.bashrc
-echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> ~/.bashrc
-echo '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"' >> ~/.bashrc
+# Set environment variables for appuser
+cat << 'EOF' >> /home/appuser/.bashrc
+export PATH="$HOME/.rbenv/bin:$PATH"
+eval "$(rbenv init -)"
+export PATH="$PATH:/usr/local/go/bin"
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"
+source "$HOME/.cargo/env"
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+EOF
+
+chown -R appuser:appuser /home/appuser/.bashrc
 
 echo "Setup complete. Review system changes and logs for any necessary manual interventions."

@@ -36,7 +36,7 @@ COPY verify.sh /tmp/verify.sh
 RUN chmod +x /tmp/ubuntu_setup.sh /tmp/verify.sh
 
 # Run setup script as root (needed for system setup)
-RUN /tmp/ubuntu_setup.sh || true
+RUN /tmp/ubuntu_setup.sh
 
 # Switch to non-root user
 USER appuser
@@ -47,4 +47,5 @@ RUN mkdir -p ~/bin && \
     cp /tmp/verify.sh ~/bin/ && \
     chmod +x ~/bin/verify.sh
 
-CMD ["/bin/bash"]
+# Source bashrc on login
+CMD ["/bin/bash", "-l"]

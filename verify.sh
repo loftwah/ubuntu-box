@@ -56,6 +56,7 @@ test_command "aws --version" "AWS CLI"
 
 # Node.js ecosystem
 echo -e "\n${BOLD}Checking Node.js ecosystem:${NC}"
+. $HOME/.nvm/nvm.sh
 check_command "node"
 check_command "npm"
 check_command "bun"
@@ -69,12 +70,14 @@ test_command "bun run ts-node --version" "ts-node"
 
 # Rust
 echo -e "\n${BOLD}Checking Rust:${NC}"
+source "$HOME/.cargo/env"
 check_command "rustc"
 check_command "cargo"
 test_command "rustc --version" "Rust"
 
 # Ruby
 echo -e "\n${BOLD}Checking Ruby:${NC}"
+eval "$(~/.rbenv/bin/rbenv init -)"
 check_command "ruby"
 check_command "rbenv"
 test_command "ruby --version" "Ruby"
