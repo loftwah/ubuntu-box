@@ -36,10 +36,16 @@ RUN apt update && apt install -y --no-install-recommends \
     python3-pip python3-dev libffi-dev libyaml-dev python3.12-venv \
     && apt clean && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user
+# Create non-root user and setup directories
 RUN useradd -m -s /bin/bash appuser \
     && mkdir -p /home/appuser/.config \
+    && mkdir -p /home/appuser/bin \
     && chown -R appuser:appuser /home/appuser
+
+# Copy verification script and set permissions (while still root)
+COPY verify.sh /home/appuser/bin/
+RUN chmod +x /home/appuser/bin/verify.sh \
+    && chown appuser:appuser /home/appuser/bin/verify.sh
 
 # Install AWS CLI
 COPY --from=amazon/aws-cli:latest /usr/local/aws-cli /usr/local/aws-cli
