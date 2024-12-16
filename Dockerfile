@@ -30,9 +30,10 @@ RUN useradd -m -s /bin/bash appuser \
     && mkdir -p /home/appuser/.config \
     && chown -R appuser:appuser /home/appuser
 
-# Copy setup script
+# Copy setup and verification scripts
 COPY ubuntu_setup.sh /tmp/ubuntu_setup.sh
-RUN chmod +x /tmp/ubuntu_setup.sh
+COPY verify.sh /tmp/verify.sh
+RUN chmod +x /tmp/ubuntu_setup.sh /tmp/verify.sh
 
 # Run setup script as root (needed for system setup)
 RUN /tmp/ubuntu_setup.sh || true
@@ -40,5 +41,10 @@ RUN /tmp/ubuntu_setup.sh || true
 # Switch to non-root user
 USER appuser
 WORKDIR /home/appuser
+
+# Add verification script to user's bin directory
+RUN mkdir -p ~/bin && \
+    cp /tmp/verify.sh ~/bin/ && \
+    chmod +x ~/bin/verify.sh
 
 CMD ["/bin/bash"]
