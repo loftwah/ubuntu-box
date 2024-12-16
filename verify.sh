@@ -56,9 +56,7 @@ test_command "aws --version" "AWS CLI"
 
 # Node.js ecosystem
 echo -e "\n${BOLD}Checking Node.js ecosystem:${NC}"
-. $HOME/.nvm/nvm.sh
 check_command "node"
-check_command "npm"
 check_command "bun"
 test_command "bun --version" "Bun"
 test_command "node --version" "Node.js"
@@ -70,18 +68,14 @@ test_command "bun run ts-node --version" "ts-node"
 
 # Rust
 echo -e "\n${BOLD}Checking Rust:${NC}"
-source "$HOME/.cargo/env"
 check_command "rustc"
 check_command "cargo"
 test_command "rustc --version" "Rust"
 
 # Ruby
 echo -e "\n${BOLD}Checking Ruby:${NC}"
-eval "$(~/.rbenv/bin/rbenv init -)"
 check_command "ruby"
-check_command "rbenv"
 test_command "ruby --version" "Ruby"
-test_command "rbenv --version" "rbenv"
 
 # Go
 echo -e "\n${BOLD}Checking Go:${NC}"
@@ -92,11 +86,10 @@ test_command "go version" "Go"
 echo -e "\n${BOLD}Checking Python ecosystem:${NC}"
 check_command "python3"
 check_command "pip3"
-source "$HOME/.cargo/env"
 check_command "uv"
 
-# Test uv with pycowsay
-echo -e "\n${BOLD}Testing uv with pycowsay:${NC}"
+# Test UV with pycowsay
+echo -e "\n${BOLD}Testing UV with pycowsay:${NC}"
 uv pip install pycowsay
 echo -e "${GREEN}Testing pycowsay:${NC}"
 uvx pycowsay 'suck my balls!'
@@ -104,9 +97,7 @@ uvx pycowsay 'suck my balls!'
 # Environment variables
 echo -e "\n${BOLD}Checking environment variables:${NC}"
 test_command "echo \$PATH | grep -q '/usr/local/go/bin'" "Go PATH"
-test_command "echo \$PATH | grep -q '/.rbenv/bin'" "rbenv PATH"
-test_command "echo \$PATH | grep -q '/.bun/bin'" "Bun PATH"
-test_command "echo \$PATH | grep -q '/.cargo/bin'" "Cargo PATH"
+test_command "echo \$PATH | grep -q '/usr/local/cargo/bin'" "Cargo PATH"
 
 echo -e "\n${BOLD}Verification complete!${NC}"
 
