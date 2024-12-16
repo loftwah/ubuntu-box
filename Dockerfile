@@ -24,6 +24,8 @@ COPY --from=node:20 /usr/local/lib/node_modules /usr/local/lib/node_modules
 COPY --from=oven/bun:latest /usr/local/bin/bun /usr/local/bin/
 COPY --from=golang:1.23 /usr/local/go /usr/local/go
 COPY --from=rust:latest /usr/local/cargo /usr/local/cargo
+COPY --from=rust:latest /usr/lib/x86_64-linux-gnu/libc.* /usr/lib/x86_64-linux-gnu/
+COPY --from=rust:latest /lib/x86_64-linux-gnu/libc.* /lib/x86_64-linux-gnu/
 COPY --from=ruby:3.3 /usr/local/bin/ruby /usr/local/bin/
 COPY --from=ruby:3.3 /usr/local/lib/ruby /usr/local/lib/ruby
 
@@ -55,8 +57,9 @@ RUN ln -s /usr/local/aws-cli/v2/current/bin/aws /usr/local/bin/aws
 USER appuser
 WORKDIR /home/appuser
 
-# Install TypeScript via Bun
-RUN bun add -g typescript ts-node
+# Install TypeScript via Bun and ensure it's in PATH
+RUN bun install -g typescript ts-node && \
+    echo 'export PATH="$HOME/.bun/bin:$PATH"' >> ~/.bashrc
 
 # Set up Python environment
 RUN python3 -m venv ~/.venv \

@@ -63,8 +63,9 @@ test_command "node --version" "Node.js"
 
 # TypeScript
 echo -e "\n${BOLD}Checking TypeScript:${NC}"
-test_command "bun run tsc --version" "TypeScript"
-test_command "bun run ts-node --version" "ts-node"
+export PATH="$HOME/.bun/bin:$PATH"
+check_command "tsc"
+check_command "ts-node"
 
 # Rust
 echo -e "\n${BOLD}Checking Rust:${NC}"
