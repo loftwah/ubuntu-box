@@ -13,7 +13,7 @@ apt install -y --no-install-recommends \
     sysstat auditd rkhunter acct aide libssl-dev \
     libreadline-dev zlib1g-dev unzip ca-certificates \
     gnupg lsb-release software-properties-common \
-    python3-pip python3-dev libffi-dev libyaml-dev
+    python3-pip python3-dev libffi-dev libyaml-dev python3.12-venv
 
 # AWS CLI Installation
 echo "Installing AWS CLI v2..."
