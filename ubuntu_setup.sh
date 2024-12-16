@@ -13,7 +13,7 @@ apt install -y --no-install-recommends \
     sysstat auditd rkhunter acct aide libssl-dev \
     libreadline-dev zlib1g-dev unzip ca-certificates \
     gnupg lsb-release software-properties-common \
-    python3-pip python3-dev
+    python3-pip python3-dev libffi-dev libyaml-dev
 
 # AWS CLI Installation
 echo "Installing AWS CLI v2..."
@@ -30,11 +30,13 @@ echo "Get:  curl https://ppng.io/hello > hello.txt"
 echo "More info: https://piping-ui.org"
 echo "---------------------------------------------------"
 
-# Configure RKHunter
+# Configure RKHunter (with error handling)
 echo "Configuring RKHunter..."
-sed -i 's|WEB_CMD="/bin/true"|WEB_CMD=""|' /etc/rkhunter.conf
-rkhunter --update
-rkhunter --propupd
+if [ -f /etc/rkhunter.conf ]; then
+    sed -i 's|^WEB_CMD=.*|WEB_CMD=""|' /etc/rkhunter.conf || true
+    rkhunter --update || true
+    rkhunter --propupd || true
+fi
 
 # Configure AIDE
 echo "Setting up AIDE..."
@@ -55,8 +57,8 @@ net.ipv4.conf.all.secure_redirects = 0
 net.ipv4.conf.default.secure_redirects = 0
 EOF
 
-# Set up NVM and Node.js for the appuser
-echo "Installing Node.js via NVM..."
+# Install NVM for Node.js and Bun
+echo "Installing Node.js via NVM and Bun..."
 su - appuser -c 'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.4/install.sh | bash'
 su - appuser -c '. ~/.nvm/nvm.sh && nvm install --lts && nvm use --lts'
 
@@ -64,12 +66,12 @@ su - appuser -c '. ~/.nvm/nvm.sh && nvm install --lts && nvm use --lts'
 echo "Installing Bun..."
 su - appuser -c 'curl -fsSL https://bun.sh/install | bash'
 
-# Install Rust for appuser
+# Install Rust
 echo "Installing Rust..."
 su - appuser -c 'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y'
 su - appuser -c 'source "$HOME/.cargo/env"'
 
-# Install Ruby via rbenv for appuser
+# Install Ruby via rbenv
 echo "Installing Ruby via rbenv..."
 su - appuser -c 'git clone https://github.com/rbenv/rbenv.git ~/.rbenv'
 su - appuser -c 'cd ~/.rbenv && src/configure && make -C src'
@@ -82,9 +84,6 @@ echo "Installing Go..."
 wget https://go.dev/dl/go1.23.4.linux-amd64.tar.gz
 tar -C /usr/local -xzf go1.23.4.linux-amd64.tar.gz
 rm go1.23.4.linux-amd64.tar.gz
-echo 'export PATH=$PATH:/usr/local/go/bin' >> /home/appuser/.profile
-echo 'export PATH=$PATH:/usr/local/go/bin' >> /home/appuser/.bashrc
-chown -R appuser:appuser /home/appuser/.profile /home/appuser/.bashrc
 
 # Install Python tools
 echo "Installing Python tools..."
@@ -96,7 +95,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Add TypeScript globally via Bun
 echo "Installing TypeScript..."
-su - appuser -c '. ~/.bashrc && bun add -g typescript ts-node'
+su - appuser -c '. ~/.bashrc && PATH=$PATH:$HOME/.bun/bin bun add -g typescript ts-node'
 
 # Cleanup
 echo "Cleaning up..."
@@ -117,6 +116,6 @@ export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
 EOF
 
-chown -R appuser:appuser /home/appuser/.bashrc
+chown -R appuser:appuser /home/appuser
 
 echo "Setup complete. Review system changes and logs for any necessary manual interventions."
