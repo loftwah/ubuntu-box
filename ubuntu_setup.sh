@@ -4,51 +4,66 @@ set -euo pipefail
 
 # Update package list and upgrade existing packages
 echo "Updating package list and upgrading system..."
-sudo apt update && sudo apt upgrade -y
+apt update && apt upgrade -y
 
 # Install essential tools
 echo "Installing essential tools..."
-sudo apt install -y curl wget build-essential git vim nano lynis fail2ban sysstat auditd rkhunter acct aide libssl-dev libreadline-dev zlib1g-dev
+apt install -y curl wget build-essential git vim nano lynis fail2ban sysstat auditd rkhunter acct aide libssl-dev libreadline-dev zlib1g-dev unzip
+
+# AWS CLI Installation
+echo "Installing AWS CLI v2..."
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+./aws/install
+rm -rf awscliv2.zip aws
+
+# Remind about Piping Server usage
+echo "---------------------------------------------------"
+echo "Tip: Use Piping Server for quick file transfers!"
+echo "Send: echo 'hello, world' | curl -T - https://ppng.io/hello"
+echo "Get:  curl https://ppng.io/hello > hello.txt"
+echo "More info: https://piping-ui.org"
+echo "---------------------------------------------------"
 
 # Run Lynis audit
 echo "Running Lynis system audit..."
-sudo lynis audit system --quiet --logfile /var/log/lynis.log --report-file /var/log/lynis-report.dat
+lynis audit system --quiet --logfile /var/log/lynis.log --report-file /var/log/lynis-report.dat
 
 # Configure Fail2Ban
 echo "Configuring Fail2Ban..."
-sudo cp /etc/fail2ban/jail.conf /etc/fail2ban/jail.local
+cp /etc/fail2ban/jail.conf /etc/fail2ban/jail.local
 if [ -z "$(ip -6 addr show scope global)" ]; then
     echo "IPv6 not detected. Disabling in Fail2Ban..."
-    sudo sed -i '/\[DEFAULT\]/a allowipv6 = no' /etc/fail2ban/jail.local
+    sed -i '/\[DEFAULT\]/a allowipv6 = no' /etc/fail2ban/jail.local
 fi
-sudo systemctl enable fail2ban
-sudo systemctl start fail2ban
+systemctl enable fail2ban
+systemctl start fail2ban
 
 # Enable auditd with custom rules
 echo "Configuring auditd..."
-sudo tee /etc/audit/rules.d/passwd_changes.rules <<EOF
+tee /etc/audit/rules.d/passwd_changes.rules <<EOF
 -w /etc/passwd -p wa -k passwd_changes
 -w /etc/group -p wa -k group_changes
 -w /etc/shadow -p wa -k shadow_changes
 EOF
-sudo augenrules --load
-sudo systemctl enable auditd
-sudo systemctl start auditd
+augenrules --load
+systemctl enable auditd
+systemctl start auditd
 
 # Configure RKHunter
 echo "Configuring RKHunter..."
-sudo sed -i 's|WEB_CMD="/bin/true"|WEB_CMD=""|' /etc/rkhunter.conf
-sudo rkhunter --update
-sudo rkhunter --propupd
+sed -i 's|WEB_CMD="/bin/true"|WEB_CMD=""|' /etc/rkhunter.conf
+rkhunter --update
+rkhunter --propupd
 
 # Configure AIDE
 echo "Setting up AIDE for file integrity monitoring..."
-sudo aideinit
-sudo mv /var/lib/aide/aide.db.new /var/lib/aide/aide.db
+aideinit
+mv /var/lib/aide/aide.db.new /var/lib/aide/aide.db
 
 # Harden system configuration
 echo "Applying system hardening configurations..."
-sudo tee /etc/sysctl.d/99-hardening.conf <<EOF
+tee /etc/sysctl.d/99-hardening.conf <<EOF
 net.ipv4.conf.all.rp_filter = 1
 net.ipv4.conf.default.rp_filter = 1
 net.ipv4.icmp_echo_ignore_broadcasts = 1
@@ -59,11 +74,11 @@ net.ipv4.conf.default.accept_redirects = 0
 net.ipv4.conf.all.secure_redirects = 0
 net.ipv4.conf.default.secure_redirects = 0
 EOF
-sudo sysctl --system
+sysctl --system
 
 # Restrict compiler access to root only
 echo "Restricting compiler access to root only..."
-sudo chmod o-rx /usr/bin/gcc /usr/bin/cc
+chmod o-rx /usr/bin/gcc /usr/bin/cc
 
 # Install NVM for Node.js and Bun
 echo "Installing Node.js via NVM and Bun..."
@@ -94,13 +109,13 @@ ruby -v
 # Install Go
 echo "Installing Go..."
 wget https://go.dev/dl/go1.23.4.linux-amd64.tar.gz
-sudo tar -C /usr/local -xzf go1.23.4.linux-amd64.tar.gz
+tar -C /usr/local -xzf go1.23.4.linux-amd64.tar.gz
 echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.profile
 source ~/.profile
 
 # Cleanup
 echo "Cleaning up unused packages..."
-sudo apt autoremove -y
+apt autoremove -y
 
 # Final message
 echo "Setup complete. Review system changes and logs for any necessary manual interventions."
