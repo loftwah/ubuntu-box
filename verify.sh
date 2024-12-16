@@ -92,8 +92,8 @@ test_command "go version" "Go"
 echo -e "\n${BOLD}Checking Python ecosystem:${NC}"
 check_command "python3"
 check_command "pip3"
-check_command "poetry"
 check_command "pipenv"
+source "$HOME/.cargo/env"
 check_command "uv"
 
 # Test uv with pycowsay
