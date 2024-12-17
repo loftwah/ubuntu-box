@@ -74,6 +74,8 @@ sudo chown -R ubuntu:ubuntu /home/ubuntu
 # Install mise
 curl https://mise.run | sh
 echo 'eval "$(/home/ubuntu/.local/bin/mise activate bash)"' >> ~/.bashrc
+source ~/.bashrc
+mise doctor
 
 # Configure mise
 cat > ~/.mise.toml << 'EOF'
