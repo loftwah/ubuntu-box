@@ -48,19 +48,10 @@ packages:
   - fd-find
   - fzf
   - ripgrep
+  - libffi-dev
+  - libyaml-dev
 
 write_files:
-  - path: /home/ubuntu/.mise.toml
-    content: |
-      [tools]
-      node = "20"
-      go = "1.22"
-      rust = "latest"
-      ruby = "3.3"
-      python = "3.12"
-    owner: ubuntu:ubuntu
-    permissions: '0644'
-
   - path: /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
     content: |
       {
@@ -190,12 +181,10 @@ write_files:
       -w /usr/bin/mise -p x -k mise_exec
 
 runcmd:
-  # Ensure required directories exist
+  # Initial setup and packages
   - mkdir -p /opt/aws/amazon-cloudwatch-agent/etc
   - mkdir -p /home/ubuntu/.local/bin
   - mkdir -p /etc/ssh/sshd_config.d
-
-  # Update packages
   - apt-get update
   - apt-get upgrade -y
 
@@ -205,42 +194,17 @@ runcmd:
   - systemctl enable auditd
   - systemctl start auditd
 
-  # Install Docker using the official convenience script
+  # Install Docker using official script
   - curl -fsSL https://get.docker.com | sh
   - usermod -aG docker ubuntu
   - systemctl enable docker
   - systemctl start docker
 
-  # Set up PATH environment
-  - echo 'export PATH="/home/ubuntu/.local/bin:$PATH"' >> /home/ubuntu/.bashrc
-  - echo 'export PATH="/home/ubuntu/.bun/bin:$PATH"' >> /home/ubuntu/.bashrc
-
-  # Create and set permissions for local bin
-  - mkdir -p /home/ubuntu/.local/bin
-  - chown -R ubuntu:ubuntu /home/ubuntu/.local
-  - chmod 755 /home/ubuntu/.local/bin
-
-  # Install mise
-  - runuser -l ubuntu -c 'export PATH="/home/ubuntu/.local/bin:$PATH" && curl https://mise.run | sh'
-  - runuser -l ubuntu -c 'echo "eval \"\$(/home/ubuntu/.local/bin/mise activate bash)\"" >> ~/.bashrc'
-
-  # Install uv
-  - curl -LsSf https://astral.sh/uv/install.sh | sh
-  - chown ubuntu:ubuntu /usr/local/bin/uv
-  - chmod 755 /usr/local/bin/uv
-
-  # Install bun
-  - runuser -l ubuntu -c 'export PATH="/home/ubuntu/.local/bin:$PATH" && curl -fsSL https://bun.sh/install | bash -s -- --yes'
-
-  # Configure CloudWatch agent
+  # Configure CloudWatch agent and other services
   - systemctl enable amazon-cloudwatch-agent
   - systemctl start amazon-cloudwatch-agent
-
-  # Apply audit rules
   - augenrules --load
   - systemctl restart auditd
-
-  # Security configurations
   - systemctl restart ssh
   - systemctl enable fail2ban
   - systemctl start fail2ban
@@ -251,15 +215,9 @@ runcmd:
   - mkdir -p /opt/ubuntu-box/scripts
   - chown -R ubuntu:ubuntu /opt/ubuntu-box
 
-  # Final permissions setup and ownership
-  - chown -R ubuntu:ubuntu /home/ubuntu
-
   # Setup automatic security updates
   - echo "APT::Periodic::Update-Package-Lists \"1\";" > /etc/apt/apt.conf.d/20auto-upgrades
   - echo "APT::Periodic::Unattended-Upgrade \"1\";" >> /etc/apt/apt.conf.d/20auto-upgrades
-
-  # Source the updated environment
-  - runuser -l ubuntu -c 'source ~/.bashrc'
 
 power_state:
   mode: reboot

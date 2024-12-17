@@ -61,6 +61,60 @@ A modern, secure Ubuntu development environment for AWS, featuring automated set
    ./scripts/connect.sh ssm
    ```
 
+## Post-Installation Setup
+
+The following tools need to be installed manually after connecting to the instance:
+
+### 1. Mise Installation
+
+```bash
+# Set proper ownership
+sudo chown -R ubuntu:ubuntu /home/ubuntu
+
+# Install mise
+curl https://mise.run | sh
+echo 'eval "$(/home/ubuntu/.local/bin/mise activate bash)"' >> ~/.bashrc
+
+# Configure mise
+cat > ~/.mise.toml << 'EOF'
+[tools]
+node = "20"
+go = "1.22"
+rust = "latest"
+ruby = "3.3"
+python = "3.12"
+EOF
+
+# Trust and install tools
+/home/ubuntu/.local/bin/mise trust
+/home/ubuntu/.local/bin/mise install
+```
+
+### 2. UV Installation
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+### 3. Bun Installation
+
+```bash
+curl -fsSL https://bun.sh/install | bash
+source ~/.bashrc
+```
+
+## Known Issues & Future Improvements
+
+1. Automate post-installation setup:
+
+   - Mise installation and configuration
+   - UV installation
+   - Bun installation
+
+2. Improve error handling in cloud-init
+3. Add verification steps for tool installation
+4. Add automated testing
+
 ## Deployment Options
 
 - **Region:** Supports us-west-1, ap-southeast-2, ap-southeast-4, us-east-1, eu-west-1
