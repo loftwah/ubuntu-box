@@ -1,189 +1,261 @@
-# Loftwah's Ubuntu Box for 2025
+# Loftwah's Ubuntu Box for 2025 (Enhanced Design Document)
 
 ## Overview
 
-**Loftwah’s Ubuntu Box for 2025** is a single-environment setup that can be deployed across multiple AWS regions and architectures. It leverages a custom Ubuntu-based AMI and a Docker-based ECS environment, providing a robust set of tools, runtimes, AWS integrations, and secure access methods. The environment is managed with Terraform, and easily configured via `region` and `arch` variables.
+**Loftwah's Ubuntu Box for 2025** describes a unified development environment that can be deployed in AWS via **two mutually exclusive options**:
 
-**New Enhancements:**
+1. **EC2-based AMI environment** (Ubuntu 24.04 LTS)
+2. **ECS-based Docker environment**
 
-- **ECR Integration:** Store and retrieve Docker images from Amazon ECR.
-- **Security Groups & IAM:** Detailed configuration for secure networking and IAM roles for both AMI and ECS.
-- **Build & Push Scripts (buildx):** Automated scripts to build and push multi-arch Docker images.
-- **Monitoring Scripts:** Additional `monitor.sh` scripts for both EC2 (AMI) and ECS environments for real-time checks.
-- **connect.sh Scripts:** Simplified `connect.sh` utilities for both EC2 and ECS to streamline SSM and SSH/Exec access.
+Both approaches provide a consistent set of tools, runtimes, and AWS integrations. Each uses Terraform for infrastructure provisioning and scripts for setup, verification, and connectivity. The environment is selected by choosing either the EC2 directory or the ECS directory—never both simultaneously.
+
+**Key Enhancements:**
+
+- **Hard-coded SSH Key (EC2):** A user-provided SSH public key is directly embedded in the Terraform configuration, ensuring consistent access without manual key distribution.
+- **ECR Integration:** Both AMI and ECS leverage Amazon ECR for storing and retrieving Docker images.
+- **Security & IAM:** Detailed configuration of IAM roles, policies, and security groups for robust AWS integration.
+- **Build & Push (Multi-Arch):** `buildx` scripts for building and pushing multi-architecture Docker images to ECR.
+- **Monitoring Scripts:** `monitor.sh` scripts for real-time environment checks. AMI and ECS have tailored versions.
+- **Connect Scripts:** `connect.sh` utilities for simplified SSH (AMI) or ECS Exec (ECS) access.
+- **Docker Installation (EC2):** Ensured via `get.docker.com` script.
+- **uv Installation (EC2):** Installed via official `uv` script.
+- **uv in ECS:** Pre-packaged into the ECS container image (built from an official `uv`-enabled base image).
+
+This document contains everything needed to instruct an LLM on how to build and manage this setup.
+
+---
 
 ## Core Principles
 
-- **Single Environment, Multi-Region:** No dev/prod split, just select AMI IDs per region/arch.
-- **Full Toolset (verify.sh):** Ensure all required tools and runtimes are present.
-- **Secure & Accessible:** SSH/SSM for AMI, ECS Exec (SSM) for ECS containers.
-- **AWS Integrations:** EFS, S3, RDS, ElastiCache, plus ECR for container images.
-- **Monitoring & Alerting:** CloudWatch metrics, logs, alarms, plus optional custom `monitor.sh`.
+- **Single Environment, Multi-Region:**  
+  No dev/prod splits. Select AMI by region and architecture as needed.
+- **Choice of Deployment:**  
+  EITHER deploy on EC2 with a custom Ubuntu-based AMI OR deploy on ECS with Docker containers. Not both at once.
 
-## Supported AMIs by Region & Architecture
+- **Full Toolset Verification:**  
+  A `verify.sh` script ensures all required tools and runtimes are installed consistently on AMI and ECS environments.
 
-The following Ubuntu 24.04 LTS (Noble Numbat) AMIs are supported:
+- **Secure & Accessible:**
+  - EC2: SSH/SSM for instance access.
+  - ECS: ECS Exec (SSM) for container access.
+- **AWS Integrations:**  
+  Integrated with EFS, S3, RDS, ElastiCache, ECR. IAM roles and Security Groups manage permissions and access.
 
-| Region         | Name         | Version   | Arch  | Storage         | Date     | AMI ID                | Virtualization |
-| -------------- | ------------ | --------- | ----- | --------------- | -------- | --------------------- | -------------- |
-| us-west-1      | Noble Numbat | 24.04 LTS | amd64 | hvm:ebs-ssd-gp3 | 20241206 | ami-0a9cd4a0a5f6c06bb | hvm            |
-| us-west-1      | Noble Numbat | 24.04 LTS | arm64 | hvm:ebs-ssd-gp3 | 20241206 | ami-0de5737cddf1c59b8 | hvm            |
-| ap-southeast-2 | Noble Numbat | 24.04 LTS | amd64 | hvm:ebs-ssd-gp3 | 20241206 | ami-0eb5e2a4908880da3 | hvm            |
-| ap-southeast-2 | Noble Numbat | 24.04 LTS | arm64 | hvm:ebs-ssd-gp3 | 20241206 | ami-0e4f8a9457c962abb | hvm            |
-| ap-southeast-4 | Noble Numbat | 24.04 LTS | amd64 | hvm:ebs-ssd-gp3 | 20241206 | ami-0fcd26ca3ba0585b6 | hvm            |
-| ap-southeast-4 | Noble Numbat | 24.04 LTS | arm64 | hvm:ebs-ssd-gp3 | 20241206 | ami-0299283ac4b0e73a9 | hvm            |
-| us-east-1      | Noble Numbat | 24.04 LTS | amd64 | hvm:ebs-ssd-gp3 | 20241206 | ami-00f3c44a2de45a590 | hvm            |
-| us-east-1      | Noble Numbat | 24.04 LTS | arm64 | hvm:ebs-ssd-gp3 | 20241206 | ami-070669ed9d7e8c691 | hvm            |
-| eu-west-1      | Noble Numbat | 24.04 LTS | amd64 | hvm:ebs-ssd-gp3 | 20241206 | ami-0d8bd47e6d44801e1 | hvm            |
-| eu-west-1      | Noble Numbat | 24.04 LTS | arm64 | hvm:ebs-ssd-gp3 | 20241206 | ami-01cbbf6d4d6a0ee3b | hvm            |
+- **Monitoring & Alerting:**  
+  CloudWatch metrics, logs, and alarms. On-demand checks via `monitor.sh`.
 
-A Terraform map will reference these AMIs by `region` and `arch`.
+---
 
-## Tooling & Runtimes: AMI vs. Docker
+## AMI Details: Ubuntu 24.04 LTS
+
+The following AMIs (Ubuntu 24.04 LTS, "Noble Numbat") are supported. Terraform maps AMI IDs by `region` and `arch`:
+
+| Region         | Arch  | AMI ID                |
+| -------------- | ----- | --------------------- |
+| us-west-1      | amd64 | ami-0a9cd4a0a5f6c06bb |
+| us-west-1      | arm64 | ami-0de5737cddf1c59b8 |
+| ap-southeast-2 | amd64 | ami-0eb5e2a4908880da3 |
+| ap-southeast-2 | arm64 | ami-0e4f8a9457c962abb |
+| ap-southeast-4 | amd64 | ami-0fcd26ca3ba0585b6 |
+| ap-southeast-4 | arm64 | ami-0299283ac4b0e73a9 |
+| us-east-1      | amd64 | ami-00f3c44a2de45a590 |
+| us-east-1      | arm64 | ami-070669ed9d7e8c691 |
+| eu-west-1      | amd64 | ami-0d8bd47e6d44801e1 |
+| eu-west-1      | arm64 | ami-01cbbf6d4d6a0ee3b |
+
+---
+
+## Hard-Coded SSH Key (EC2)
+
+Include the following SSH public key in the Terraform `aws_key_pair` resource:
+
+```
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDBFghqMnnpyftkhyAnsg82i+F9nw8Xh9U/8u/J2DggLcwlOUKnlG8T55gSMchE81n+pUdjn6fG6S85aQhCdAQANzjC+eQYiFU184ZqWBIS1DfnJwfqGLeExjl2HYvgcjsailO5EIWT0RKCTLpLGtW2dNA6qtj4SJy5nJP1C3l5R1H5UNT90MXh41E0/7wCNv2eNWZeWaWx9bcSh6lxx0u4S0grMTuh7uPOnSFysoQsFC+2Sa+YzOLrNA2S1Nwkc735QM2puzMs+488Qsiicl7OrlZciALQ1o82uodxlBD1FQJvnQGXfbTjNEOpxi5xFzESiDFfC62sYkzV8GjWia2TJDZow4pK/OnBkPkwYu6DZ02hLgSS6MYHliMBF7z5uUNsv6PpKVgkyIz2ZxjR02U8Mx0IbISf8iK8k8uf3IptPwLk+Dc/nyX/yYTa8VrACx/owI+qflFA6DgpTaI4CCXOJSgFZSIg/6W1inWNxb5iciQpfS73xS9aJy4HDGoH3YuEhyYkkxP4Pd47xt/hUXcY+Z1cK7/7S7iAVKYLM5Wd/PoMHxoT71sfICqnUeszY5CLp4UY9ZrAvG5sORGXQJ8OTLJO1m+6mL7uWv43+daUcpioucr9qcMRJshwSEJdpBUn4VW5plaQzAzUUlE3YBI7szSJIFkCb6Fe/y+9P6UGHQ== dean@deanlofts.xyz
+```
+
+This ensures direct SSH access to the EC2 instance using this key.
+
+---
+
+## Tooling & Runtimes: Comparison
 
 **On the AMI (EC2 Instance):**
 
-- **OS Security & Monitoring Tools:** `lynis`, `fail2ban`, `rkhunter`, `aide`
+- **OS Security & Monitoring:** `lynis`, `fail2ban`, `rkhunter`, `aide`
 - **Base Tools:** `curl`, `wget`, `git`, `vim`, `nano`, `build-essential`, `python3-pip`
-- **Runtimes (Mise):** Node.js (20), Go (1.22), Rust (latest), Ruby (3.3), Python (3.12)
-- **Additional Tools:** Bun, uv, fd, fzf, ripgrep, AWS CLI, ImageMagick, jq, yq, htop, ncdu, zip/unzip
-- **Docker:** Installed via `get.docker.com`
-- **EFS Utils:** `amazon-efs-utils` for mounting/unmounting EFS.
-- **ECR Login:** `aws ecr get-login-password` integrated into setup for pulling/pushing images.
+- **Runtimes:** Node.js (20), Go (1.22), Rust (latest), Ruby (3.3), Python (3.12)
+- **Additional CLI Tools:** Bun, uv (installed via official script), fd, fzf, ripgrep, AWS CLI, ImageMagick, jq, yq, htop, ncdu, zip/unzip
+- **Docker:** Installed via `curl -fsSL https://get.docker.com | sh`
+- **EFS Utils:** `amazon-efs-utils` for mounting/unmounting EFS
+- **ECR Login:** Scripts call `aws ecr get-login-password`
 - **Scripts:**
-  - `build.sh` and `buildx` scripts for building/pushing Docker images to ECR.
-  - `monitor.sh` for on-demand checks (CPU load, disk usage, etc.).
-  - `connect.sh` for easy SSH or SSM session establishment.
+  - `build.sh` / `buildx.sh`: Build and push Docker images to ECR.
+  - `monitor.sh`: On-demand checks (CPU, disk, memory).
+  - `connect.sh`: Easy SSH or SSM sessions.
+  - `verify.sh`: Confirm all tools and runtimes installed.
 
-**On the Docker Container (ECS Environment):**
+**On the Docker Container (ECS):**
 
-- **No OS Security Tools:** No `lynis`, `fail2ban`, `rkhunter`, `aide`.
-- **Runtimes:** Copied from official images: Node, Go, Rust, Ruby, Python, plus Bun, uv, fd, fzf, ripgrep, AWS CLI, ImageMagick, jq, yq, htop, ncdu, zip/unzip.
-- **No SSH Needed:** Use ECS Exec (SSM) and a `connect.sh` script that runs `aws ecs execute-command`.
-- **Minimal EFS:** Typically omit EFS utils unless required. If EFS needed for ECS tasks, mount via ECS Task Definition configuration.
-- **monitor.sh for ECS:** Could run a simplified `monitor.sh` inside the container (via ECS Exec) for debugging resource usage in real-time.
+- **No OS Security Tools.**
+- **Runtimes & Tools Pre-Installed in Image:** Same as AMI but sourced from official or community images including uv (pre-built into the Docker image).
+- **No SSH:** Use ECS Exec (SSM) via `connect.sh` which runs `aws ecs execute-command`.
+- **EFS on ECS:** If needed, mounted via ECS Task Definition configuration.
+- **monitor.sh on ECS:** A simplified script for container-level checks. Accessible via ECS Exec.
 
-This ensures `verify.sh` passes on AMI and Docker (for non-OS-level tools), guaranteeing a consistent developer experience.
+`verify.sh` ensures consistency in tool availability across both AMI and ECS.
+
+---
 
 ## AWS Services Integration
 
 - **ECR:**  
-  Store built Docker images. The `build.sh` (or `buildx` version `buildx.sh`) script on the AMI can login to ECR, build multi-architecture images, and push them. ECS tasks pull from ECR.
+  `buildx.sh` builds and pushes multi-arch images to ECR. ECS tasks pull images from ECR.
 - **EFS, S3, RDS, ElastiCache:**
-  - IAM roles grant access.
-  - Security groups must allow access to RDS/ElastiCache endpoints.
-  - EFS can be mounted on AMI and ECS tasks. Ensure proper unmounting on AMI and ECS Task definition for ECS.
+  - IAM roles manage access.
+  - Security groups control network access.
+  - EFS mounts on AMI and optional on ECS tasks.
+
+---
 
 ## Access & Security
 
-- **SSH Keys:**  
-  Terraform’s `aws_key_pair` for AMI SSH. SG allows `0.0.0.0/0` temporarily.  
-  `connect.sh` script can simplify SSH by reading instance details from Terraform outputs.
+- **SSH (EC2 Only):**  
+  Terraform creates `aws_key_pair` with the hard-coded public key.  
+  Security Groups can initially allow inbound SSH from `0.0.0.0/0` for setup (not recommended long-term).
 
-- **SSM Access:**
-  AMI and ECS both use SSM.  
-  `connect.sh` can run `aws ssm start-session` for AMI or `aws ecs execute-command` for ECS containers.
+- **SSM Access:**  
+  Both AMI and ECS support SSM.  
+  `connect.sh` leverages `aws ssm start-session` (AMI) or `aws ecs execute-command` (ECS).
 
-- **IAM & Networking:**
-  - IAM roles for EC2 and ECS tasks include `ecr:GetAuthorizationToken`, `s3:*` (as needed), `rds:Connect`, `elasticache:*`, and `efs:*`.
-  - Default VPC and subnets if not provided.
-  - Security groups refined: separate SGs for AMI and ECS tasks, allowing outbound internet access for ECR, inbound SSH for AMI, and internal access for RDS/ElastiCache.
+- **IAM & Networking:**  
+  IAM roles grant least-privilege access to ECR, S3, RDS, ElastiCache, EFS.  
+  VPC, subnet, and security groups defined via Terraform with minimal required permissions and ingress rules.
+
+---
 
 ## Monitoring & Alerting
 
-- **CloudWatch Agent on AMI:** CPU, memory, disk metrics.
-- **ECS Logs to CloudWatch Logs:** ECS tasks log for analysis.
-- **CloudWatch Alarms:** On CPU > 80%, memory > 80%, disk < 10%. Alarms trigger SNS notifications.
-- **monitor.sh Scripts:**
-  - On AMI: `monitor.sh` could quickly show system load, disk usage, top processes.
-  - On ECS: `monitor.sh` run via ECS Exec for container-level checks.
+- **CloudWatch Agent (EC2):**  
+  AMI collects CPU, memory, disk metrics, and sends them to CloudWatch.
+
+- **ECS Logging:**  
+  ECS tasks send logs to CloudWatch Logs.
+
+- **CloudWatch Alarms:**  
+  Configurable alarms trigger on CPU > 80%, memory > 80%, disk < 10%.  
+  Alarms send notifications (e.g., SNS).
+
+- **monitor.sh Scripts:**  
+  AMI: Detailed system checks.  
+  ECS: Container-level checks via ECS Exec.
+
+---
 
 ## Maintenance & Updates
 
-- **Rebuild AMI:** Update packages, run `mise` for new runtime versions.
-- **Update Docker Images:**
-  - `buildx.sh` for multi-arch builds.
-  - Push updated images to ECR.
-- **Run verify.sh:** Ensure environment integrity after updates.
+- **Rebuild AMI:**  
+  Update packages, rerun setup to refresh runtimes (via `mise` or direct installs).
 
-## Recommended Directory Structure
+- **Update Docker Images (ECS):**  
+  Use `buildx.sh` to produce multi-arch images, push to ECR, update ECS Task Definitions.
+
+- **verify.sh:**  
+  Run after updates to confirm tool availability and integrity.
+
+---
+
+## Directory Structure
 
 ```
-project-root/
-├─ terraform/
-│  ├─ main.tf
-│  ├─ variables.tf        # region, arch
-│  ├─ outputs.tf
-│  ├─ providers.tf
-│  ├─ locals.tf           # AMI maps keyed by region & arch
-│  ├─ modules/
-│  │  ├─ ami/
-│  │  │  ├─ main.tf
-│  │  │  ├─ variables.tf
-│  │  │  ├─ outputs.tf
-│  │  │  └─ scripts/
-│  │  │     ├─ cloud-init.yml
-│  │  │     ├─ mise.toml
-│  │  │     ├─ setup.sh      # Installs security tools, uv, bun, docker, efs, etc.
-│  │  ├─ ecs/
-│  │  │  ├─ main.tf          # ECS cluster, service, task definition
-│  │  │  ├─ variables.tf
-│  │  │  ├─ outputs.tf
-│  │  ├─ networking/
-│  │  │  ├─ main.tf          # SGs, VPC defaults
-│  │  │  ├─ variables.tf
-│  │  │  ├─ outputs.tf
-│  │  └─ monitoring/
-│  │     ├─ main.tf          # CW alarms, log groups
-│  │     ├─ variables.tf
-│  │     ├─ outputs.tf
-│  ├─ terraform.tfvars       # default region if wanted
-│  └─ README.md
+ubuntu-box-2025/
+├─ ec2-environment/
+│  ├─ terraform/
+│  │  ├─ variables.tf        # region, arch
+│  │  ├─ outputs.tf
+│  │  ├─ providers.tf
+│  │  ├─ locals.tf           # Maps AMI IDs by region & arch
+│  │  └─ main.tf             # Includes aws_key_pair with hard-coded SSH public key
+│  ├─ scripts/
+│  │  ├─ cloud-init.yml
+│  │  ├─ mise.toml
+│  │  ├─ setup.sh            # Installs security tools, uv (via official script), bun, docker (via get.docker.com), etc.
+│  │  ├─ verify.sh
+│  │  ├─ monitor.sh
+│  │  ├─ mount_efs.sh
+│  │  └─ connect.sh
+│  └─ docs/
+│     ├─ SETUP.md
+│     ├─ MONITORING.md
+│     └─ SECURITY.md
 │
-├─ docker/
-│  ├─ Dockerfile             # Mirrors AMI tools (minus OS security)
-│  ├─ verify.sh              # Check tool presence
-│  ├─ build.sh               # Simple build & push script
-│  ├─ buildx.sh              # Multi-arch build & push via buildx to ECR
-│  ├─ monitor.sh             # Container-level checks if needed
-│  ├─ connect.sh             # ECS Exec simplified script
-│  └─ README.md
+├─ ecs-environment/
+│  ├─ terraform/
+│  │  ├─ variables.tf        # region, cluster settings
+│  │  ├─ outputs.tf
+│  │  └─ providers.tf
+│  ├─ docker/
+│  │  ├─ Dockerfile          # Based on a uv-enabled official image plus Node, Go, Rust, Ruby, Python, Bun, fd, fzf, ripgrep, AWS CLI, etc.
+│  │  ├─ verify.sh
+│  │  ├─ build.sh
+│  │  ├─ buildx.sh
+│  │  ├─ monitor.sh
+│  │  └─ connect.sh
+│  └─ docs/
+│     ├─ SETUP.md
+│     ├─ CONTAINERS.md
+│     └─ MONITORING.md
 │
-├─ scripts/
-│  ├─ setup_ami.sh
-│  ├─ mount_efs.sh           # Clean EFS mount/unmount on AMI
-│  ├─ verify_local.sh        # Run after SSH/SSM into AMI
-│  ├─ monitor.sh             # AMI-level system checks
-│  ├─ connect.sh             # SSH/SSM session simplified for AMI
-│  └─ README.md
-│
-├─ docs/
-│  ├─ DESIGN.md              # Loftwah’s Ubuntu Box for 2025 (this doc)
-│  ├─ MONITORING.md          # Detailed monitoring & alerting steps
-│  ├─ AWS_SERVICES.md        # EFS, S3, RDS, ElastiCache usage examples
-│  ├─ SECURITY.md            # Hardening, SSH key rotation, fail2ban configs
-│  └─ ECR.md                 # ECR usage guidelines, buildx instructions
-│
-└─ .gitignore
+└─ README.md                  # Guidance on choosing EC2 vs ECS deployment
 ```
+
+---
+
+## Implementation Notes
+
+- **Mutually Exclusive Deployments:**  
+  The Terraform in `ec2-environment` and `ecs-environment` directories should never be applied simultaneously.
+- **SSH Key Already Included (EC2):**  
+  The `aws_key_pair` resource uses the provided SSH public key to ensure seamless SSH access.
+
+- **uv Installation:**
+
+  - EC2: `setup.sh` uses the official uv installation script.
+  - ECS: Dockerfile uses an official uv-enabled base image.
+
+- **Docker Installation (EC2):**  
+  Achieved via `curl -fsSL https://get.docker.com | sh` in `setup.sh`.
+
+- **Runtimes & Tools:**  
+  Confirmed by `verify.sh` to ensure consistency.
+
+---
 
 ## Putting It All Together
 
-- **AMI:**  
-  Launch using region/arch-specific AMIs.  
-  Includes OS security tools, Docker, EFS utils, full runtime & toolset.
+1. **For AMI (EC2):**
 
-- **Docker & ECS:**  
-  Docker image built and stored in ECR.  
-  ECS tasks pull from ECR and run the same runtimes/tools minus OS-level security.
+   - Run Terraform in `ec2-environment/terraform/` with `region` and `arch` variables.
+   - Terraform provisions an EC2 instance using the chosen AMI and configures the `aws_key_pair` with the hard-coded SSH key.
+   - Run `setup.sh` (via user-data or manually) to install runtimes, Docker (via `get.docker.com`), uv (via official script), and security tools.
+   - Use `verify.sh` to ensure environment integrity.
+   - `connect.sh` for SSH or SSM access.
+   - `monitor.sh` for on-demand checks.
 
-- **Access & Maintenance:**
+2. **For ECS (Docker):**
 
-  - `connect.sh` for quick SSH/SSM/ECS Exec.
-  - `buildx.sh` for multi-arch image builds.
-  - `monitor.sh` scripts for quick system checks on both AMI and ECS.
+   - Run Terraform in `ecs-environment/terraform/` to create an ECS cluster, task definitions, and services.
+   - `buildx.sh` builds and pushes multi-arch images to ECR, including uv and other tools.
+   - ECS tasks run containers that include all runtimes and tools except OS-level security utilities.
+   - Use `connect.sh` with `aws ecs execute-command` for container-level access.
+   - `monitor.sh` inside containers for runtime diagnostics.
 
-- **AWS Integration & Security:**
-  IAM roles, security groups, and default VPC usage ensure minimal config overhead.
-  ECR provides a secure, private registry for images.
-  CloudWatch offers metrics, logs, and alarms for proactive monitoring.
+3. **AWS Integrations:**  
+   All code references IAM roles, security groups, VPCs, and services like ECR, EFS, RDS, ElastiCache. Confirm credentials and policies in Terraform code.
+
+---
+
+This design document should be given to the LLM so it can:
+
+- Understand the entire architecture and workflow.
+- Generate Terraform, shell scripts, Dockerfiles, and documentation.
+- Implement the environment as specified, including the hard-coded SSH key, Docker installation method, and uv setup approach.
