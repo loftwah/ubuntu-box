@@ -45,6 +45,9 @@ packages:
   - npm
   - rustc
   - cargo
+  - fd-find
+  - fzf
+  - ripgrep
 
 write_files:
   - path: /home/ubuntu/.mise.toml
@@ -208,9 +211,16 @@ runcmd:
   - systemctl enable docker
   - systemctl start docker
 
+  # Ensure the ~/.local/bin directory exists and is owned by ubuntu
+  - mkdir -p /home/ubuntu/.local/bin
+  - chown -R ubuntu:ubuntu /home/ubuntu/.local
+
+  # Add ~/.local/bin to PATH in .bashrc
+  - runuser -l ubuntu -c 'echo "export PATH=\$HOME/.local/bin:\$PATH" >> ~/.bashrc'
+
   # Install mise as ubuntu user
   - runuser -l ubuntu -c 'curl https://mise.run | sh'
-  - runuser -l ubuntu -c 'mkdir -p ~/.local/bin && cp ~/.local/bin/mise /tmp/mise && sudo mv /tmp/mise /usr/local/bin/mise'
+  - runuser -l ubuntu -c 'echo "eval \"\$(/home/ubuntu/.local/bin/mise activate bash)\"" >> ~/.bashrc'
 
   # Install uv as ubuntu user
   - runuser -l ubuntu -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'
@@ -219,10 +229,6 @@ runcmd:
   # Install bun as ubuntu user
   - runuser -l ubuntu -c 'curl -fsSL https://bun.sh/install | bash -s -- --yes'
   - runuser -l ubuntu -c 'echo "export PATH=\$HOME/.bun/bin:\$PATH" >> ~/.bashrc'
-
-  # Install additional development tools using cargo and npm
-  - runuser -l ubuntu -c 'cargo install fd-find ripgrep'
-  - runuser -l ubuntu -c 'npm install -g fzf'
 
   # Configure CloudWatch agent
   - systemctl enable amazon-cloudwatch-agent
