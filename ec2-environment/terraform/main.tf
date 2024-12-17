@@ -178,6 +178,7 @@ resource "aws_iam_instance_profile" "ubuntu_box" {
   role = aws_iam_role.ubuntu_box.name
 }
 
+# IAM Role
 resource "aws_iam_role" "ubuntu_box" {
   name = "ubuntu-box-role"
 
@@ -193,14 +194,32 @@ resource "aws_iam_role" "ubuntu_box" {
       }
     ]
   })
+}
 
-  managed_policy_arns = [
-    "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
-    "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy",
-    "arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess",
-    "arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess",
-    "arn:aws:iam::aws:policy/AmazonElasticFileSystemReadOnlyAccess"
-  ]
+# IAM Role Policy Attachments
+resource "aws_iam_role_policy_attachment" "ssm_managed_instance_core" {
+  role       = aws_iam_role.ubuntu_box.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_role_policy_attachment" "cloudwatch_agent_server_policy" {
+  role       = aws_iam_role.ubuntu_box.name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+}
+
+resource "aws_iam_role_policy_attachment" "ec2_read_only_access" {
+  role       = aws_iam_role.ubuntu_box.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess"
+}
+
+resource "aws_iam_role_policy_attachment" "ssm_read_only_access" {
+  role       = aws_iam_role.ubuntu_box.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess"
+}
+
+resource "aws_iam_role_policy_attachment" "efs_read_only_access" {
+  role       = aws_iam_role.ubuntu_box.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonElasticFileSystemReadOnlyAccess"
 }
 
 # EC2 Instance
@@ -223,7 +242,7 @@ resource "aws_instance" "ubuntu_box" {
     http_tokens   = "required"
   }
 
-  user_data = base64encode(templatefile("${path.module}/cloud-init.yml", {
+  user_data = base64encode(templatefile("../scripts/cloud-init.yml", {
     region = var.region
     arch   = var.arch
   }))
