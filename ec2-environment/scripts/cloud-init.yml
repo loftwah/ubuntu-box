@@ -5,7 +5,7 @@ package_upgrade: true
 apt:
   sources:
     docker.list:
-      source: deb [arch=$${dpkg:Arch} signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $${lsb:Codename} stable
+      source: deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable
       keyid: "9DC858229FC7DD38854AE2D88D81803C0EBFCD88"
 
 packages:
@@ -114,7 +114,7 @@ write_files:
             }
           },
           "append_dimensions": {
-            "InstanceId": "${aws:InstanceId}"
+            "InstanceId": "$${aws:InstanceId}"
           }
         },
         "logs": {
