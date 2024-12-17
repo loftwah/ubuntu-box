@@ -1,0 +1,254 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+
+apt:
+  sources:
+    docker.list:
+      source: deb [arch=$${dpkg:Arch} signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $${lsb:Codename} stable
+      keyid: "9DC858229FC7DD38854AE2D88D81803C0EBFCD88"
+
+packages:
+  # Base system packages
+  - curl
+  - wget
+  - git
+  - vim
+  - nano
+  - build-essential
+  - python3-pip
+  - python3-venv
+  - apt-transport-https
+  - ca-certificates
+  - gnupg
+  - lsb-release
+  
+  # AWS integration
+  - amazon-cloudwatch-agent
+  - amazon-efs-utils
+  
+  # Security tools
+  - fail2ban
+  - rkhunter
+  - aide
+  - lynis
+  - unattended-upgrades
+  - apparmor
+  - auditd
+  
+  # Development dependencies
+  - pkg-config
+  - libssl-dev
+  - zlib1g-dev
+  - jq
+  - yq
+  - htop
+  - ncdu
+  - zip
+  - unzip
+  - tree
+  - tmux
+  - imagemagick
+
+write_files:
+  # mise configuration
+  - path: /home/ubuntu/.mise.toml
+    content: |
+      [tools]
+      node = "20"
+      go = "1.22"
+      rust = "latest"
+      ruby = "3.3"
+      python = "3.12"
+    owner: ubuntu:ubuntu
+    permissions: '0644'
+
+  # CloudWatch agent configuration
+  - path: /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+    content: |
+      {
+        "agent": {
+          "metrics_collection_interval": 60,
+          "run_as_user": "root"
+        },
+        "metrics": {
+          "metrics_collected": {
+            "cpu": {
+              "measurement": [
+                "cpu_usage_idle",
+                "cpu_usage_user",
+                "cpu_usage_system",
+                "cpu_usage_iowait"
+              ],
+              "resources": ["*"],
+              "totalcpu": true
+            },
+            "disk": {
+              "measurement": [
+                "used_percent",
+                "free",
+                "total",
+                "inodes_free",
+                "inodes_used"
+              ],
+              "resources": ["/"],
+              "drop_device": true
+            },
+            "mem": {
+              "measurement": [
+                "mem_used_percent",
+                "mem_total",
+                "mem_free",
+                "mem_cached",
+                "mem_available"
+              ]
+            },
+            "net": {
+              "resources": ["*"],
+              "measurement": [
+                "bytes_sent",
+                "bytes_recv",
+                "packets_sent",
+                "packets_recv"
+              ]
+            }
+          },
+          "append_dimensions": {
+            "InstanceId": "${aws:InstanceId}"
+          }
+        },
+        "logs": {
+          "logs_collected": {
+            "files": {
+              "collect_list": [
+                {
+                  "file_path": "/var/log/auth.log",
+                  "log_group_name": "/ubuntu-box/auth",
+                  "log_stream_name": "{instance_id}"
+                },
+                {
+                  "file_path": "/var/log/syslog",
+                  "log_group_name": "/ubuntu-box/syslog",
+                  "log_stream_name": "{instance_id}"
+                },
+                {
+                  "file_path": "/var/log/docker/docker.log",
+                  "log_group_name": "/ubuntu-box/docker",
+                  "log_stream_name": "{instance_id}"
+                }
+              ]
+            }
+          }
+        }
+      }
+
+  # SSH hardening configuration
+  - path: /etc/ssh/sshd_config.d/hardening.conf
+    content: |
+      PermitRootLogin no
+      PasswordAuthentication no
+      MaxAuthTries 3
+      ClientAliveInterval 300
+      ClientAliveCountMax 2
+      LoginGraceTime 30
+      AllowAgentForwarding no
+      X11Forwarding no
+      Protocol 2
+      KexAlgorithms curve25519-sha256@libssh.org,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512
+      Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com
+      MACs hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com
+
+  # fail2ban configuration
+  - path: /etc/fail2ban/jail.local
+    content: |
+      [DEFAULT]
+      bantime = 3600
+      findtime = 600
+      maxretry = 3
+      
+      [sshd]
+      enabled = true
+      port = ssh
+      filter = sshd
+      logpath = /var/log/auth.log
+      maxretry = 3
+
+  # Audit rules
+  - path: /etc/audit/rules.d/audit.rules
+    content: |
+      # Delete all existing rules
+      -D
+      
+      # Set buffer size
+      -b 8192
+      
+      # Monitor unauthorized access attempts
+      -w /var/log/auth.log -p wa -k auth_log
+      -w /var/log/syslog -p wa -k syslog
+      
+      # Monitor system configuration changes
+      -w /etc/passwd -p wa -k passwd_changes
+      -w /etc/group -p wa -k group_changes
+      -w /etc/ssh/sshd_config -p wa -k sshd_config
+      
+      # Monitor binaries
+      -w /usr/bin/docker -p x -k docker_exec
+      -w /usr/bin/mise -p x -k mise_exec
+
+runcmd:
+  # System setup
+  - systemctl enable unattended-upgrades
+  - systemctl start unattended-upgrades
+  - systemctl enable auditd
+  - systemctl start auditd
+  
+  # Install Docker
+  - mkdir -p /etc/apt/keyrings
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  - apt-get update
+  - apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  - usermod -aG docker ubuntu
+  - systemctl enable docker
+  - systemctl start docker
+  
+  # Install mise
+  - curl https://mise.run | sh
+  - cp /root/.local/bin/mise /usr/local/bin/
+  - chown ubuntu:ubuntu /home/ubuntu/.mise.toml
+  
+  # Install uv
+  - curl -LsSf https://astral.sh/uv/install.sh | sh
+  - mv uv /usr/local/bin/
+  
+  # Install additional development tools
+  - curl -fsSL https://bun.sh/install | bash
+  - runuser -l ubuntu -c 'cargo install fd-find ripgrep'
+  - runuser -l ubuntu -c 'npm install -g fzf'
+  
+  # Configure CloudWatch agent
+  - systemctl enable amazon-cloudwatch-agent
+  - systemctl start amazon-cloudwatch-agent
+  
+  # Security configurations
+  - systemctl restart sshd
+  - systemctl enable fail2ban
+  - systemctl start fail2ban
+  - aideinit
+  - mv /var/lib/aide/aide.db.new /var/lib/aide/aide.db
+  
+  # Create management scripts directory
+  - mkdir -p /opt/ubuntu-box/scripts
+  - chown -R ubuntu:ubuntu /opt/ubuntu-box
+  
+  # Final permissions setup
+  - chown -R ubuntu:ubuntu /home/ubuntu
+  - chmod 755 /usr/local/bin/*
+
+  # Setup automatic security updates
+  - echo "APT::Periodic::Update-Package-Lists \"1\";" > /etc/apt/apt.conf.d/20auto-upgrades
+  - echo "APT::Periodic::Unattended-Upgrade \"1\";" >> /etc/apt/apt.conf.d/20auto-upgrades
+
+power_state:
+  mode: reboot
+  timeout: 30
+  condition: True
