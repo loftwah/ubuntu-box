@@ -78,11 +78,11 @@ echo 'eval "$(/home/ubuntu/.local/bin/mise activate bash)"' >> ~/.bashrc
 # Configure mise
 cat > ~/.mise.toml << 'EOF'
 [tools]
-node = "20"
-go = "1.22"
+node = "latest"
+go = "latest"
 rust = "latest"
-ruby = "3.3"
-python = "3.12"
+ruby = "latest"
+python = "latest"
 EOF
 
 # Trust and install tools
