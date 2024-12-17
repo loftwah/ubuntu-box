@@ -2,12 +2,6 @@
 package_update: true
 package_upgrade: true
 
-apt:
-  sources:
-    docker.list:
-      source: deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable
-      keyid: "9DC858229FC7DD38854AE2D88D81803C0EBFCD88"
-
 packages:
   # Base system packages
   - curl
@@ -202,11 +196,8 @@ runcmd:
   - systemctl enable auditd
   - systemctl start auditd
   
-  # Install Docker
-  - mkdir -p /etc/apt/keyrings
-  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-  - apt-get update
-  - apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  # Install Docker using official convenience script
+  - curl -fsSL https://get.docker.com | sh
   - usermod -aG docker ubuntu
   - systemctl enable docker
   - systemctl start docker
@@ -243,7 +234,7 @@ runcmd:
   # Final permissions setup
   - chown -R ubuntu:ubuntu /home/ubuntu
   - chmod 755 /usr/local/bin/*
-
+  
   # Setup automatic security updates
   - echo "APT::Periodic::Update-Package-Lists \"1\";" > /etc/apt/apt.conf.d/20auto-upgrades
   - echo "APT::Periodic::Unattended-Upgrade \"1\";" >> /etc/apt/apt.conf.d/20auto-upgrades
