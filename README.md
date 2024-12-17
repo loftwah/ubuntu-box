@@ -172,13 +172,9 @@ ubuntu-box-2025/
 │  ├─ terraform/
 │  │  ├─ variables.tf        # region, arch
 │  │  ├─ outputs.tf
-│  │  ├─ providers.tf
-│  │  ├─ locals.tf           # Maps AMI IDs by region & arch
 │  │  └─ main.tf             # Includes aws_key_pair with hard-coded SSH public key
 │  ├─ scripts/
 │  │  ├─ cloud-init.yml
-│  │  ├─ mise.toml
-│  │  ├─ setup.sh            # Installs security tools, uv (via official script), bun, docker (via get.docker.com), etc.
 │  │  ├─ verify.sh
 │  │  ├─ monitor.sh
 │  │  ├─ mount_efs.sh
@@ -192,9 +188,8 @@ ubuntu-box-2025/
 │  ├─ terraform/
 │  │  ├─ variables.tf        # region, cluster settings
 │  │  ├─ outputs.tf
-│  │  └─ providers.tf
 │  ├─ docker/
-│  │  ├─ Dockerfile          # Based on a uv-enabled official image plus Node, Go, Rust, Ruby, Python, Bun, fd, fzf, ripgrep, AWS CLI, etc.
+│  │  ├─ Dockerfile          # Based on a Ubuntu 24.04 official image plus Node, Go, Rust, Ruby, Python, Bun, fd, fzf, ripgrep, AWS CLI, etc.
 │  │  ├─ verify.sh
 │  │  ├─ build.sh
 │  │  ├─ buildx.sh
