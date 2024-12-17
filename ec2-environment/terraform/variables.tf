@@ -3,7 +3,7 @@
 variable "region" {
   description = "AWS region to deploy the Ubuntu Box"
   type        = string
-  default     = "us-east-1"
+  default     = "ap-southeast-2"
 
   validation {
     condition     = can(regex("^(us-west-1|ap-southeast-2|ap-southeast-4|us-east-1|eu-west-1)$", var.region))
