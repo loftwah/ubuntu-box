@@ -211,24 +211,26 @@ runcmd:
   - systemctl enable docker
   - systemctl start docker
 
-  # Ensure the ~/.local/bin directory exists and is owned by ubuntu
+  # Set up PATH environment
+  - echo 'export PATH="/home/ubuntu/.local/bin:$PATH"' >> /home/ubuntu/.bashrc
+  - echo 'export PATH="/home/ubuntu/.bun/bin:$PATH"' >> /home/ubuntu/.bashrc
+
+  # Create and set permissions for local bin
   - mkdir -p /home/ubuntu/.local/bin
   - chown -R ubuntu:ubuntu /home/ubuntu/.local
+  - chmod 755 /home/ubuntu/.local/bin
 
-  # Add ~/.local/bin to PATH in .bashrc
-  - runuser -l ubuntu -c 'echo "export PATH=\$HOME/.local/bin:\$PATH" >> ~/.bashrc'
-
-  # Install mise as ubuntu user
-  - runuser -l ubuntu -c 'curl https://mise.run | sh'
+  # Install mise
+  - runuser -l ubuntu -c 'export PATH="/home/ubuntu/.local/bin:$PATH" && curl https://mise.run | sh'
   - runuser -l ubuntu -c 'echo "eval \"\$(/home/ubuntu/.local/bin/mise activate bash)\"" >> ~/.bashrc'
 
-  # Install uv as ubuntu user
-  - runuser -l ubuntu -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'
-  - runuser -l ubuntu -c 'mkdir -p ~/.local/bin && sudo mv uv /usr/local/bin/uv'
+  # Install uv
+  - curl -LsSf https://astral.sh/uv/install.sh | sh
+  - chown ubuntu:ubuntu /usr/local/bin/uv
+  - chmod 755 /usr/local/bin/uv
 
-  # Install bun as ubuntu user
-  - runuser -l ubuntu -c 'curl -fsSL https://bun.sh/install | bash -s -- --yes'
-  - runuser -l ubuntu -c 'echo "export PATH=\$HOME/.bun/bin:\$PATH" >> ~/.bashrc'
+  # Install bun
+  - runuser -l ubuntu -c 'export PATH="/home/ubuntu/.local/bin:$PATH" && curl -fsSL https://bun.sh/install | bash -s -- --yes'
 
   # Configure CloudWatch agent
   - systemctl enable amazon-cloudwatch-agent
@@ -249,13 +251,15 @@ runcmd:
   - mkdir -p /opt/ubuntu-box/scripts
   - chown -R ubuntu:ubuntu /opt/ubuntu-box
 
-  # Final permissions setup
+  # Final permissions setup and ownership
   - chown -R ubuntu:ubuntu /home/ubuntu
-  - chmod 755 /usr/local/bin/*
 
   # Setup automatic security updates
   - echo "APT::Periodic::Update-Package-Lists \"1\";" > /etc/apt/apt.conf.d/20auto-upgrades
   - echo "APT::Periodic::Unattended-Upgrade \"1\";" >> /etc/apt/apt.conf.d/20auto-upgrades
+
+  # Source the updated environment
+  - runuser -l ubuntu -c 'source ~/.bashrc'
 
 power_state:
   mode: reboot
