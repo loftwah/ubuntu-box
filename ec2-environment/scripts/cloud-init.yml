@@ -187,16 +187,21 @@ write_files:
       -w /usr/bin/mise -p x -k mise_exec
 
 runcmd:
+  # Ensure required directories exist
+  - mkdir -p /opt/aws/amazon-cloudwatch-agent/etc
+  - mkdir -p /home/ubuntu/.local/bin
+  - mkdir -p /etc/ssh/sshd_config.d
+
   # Update packages
   - apt-get update
   - apt-get upgrade -y
-  
+
   # Enable and start essential services
   - systemctl enable unattended-upgrades
   - systemctl start unattended-upgrades
   - systemctl enable auditd
   - systemctl start auditd
-  
+
   # Install Docker using the official convenience script
   - curl -fsSL https://get.docker.com | sh
   - usermod -aG docker ubuntu
@@ -205,39 +210,43 @@ runcmd:
 
   # Install mise as ubuntu user
   - runuser -l ubuntu -c 'curl https://mise.run | sh'
-  - runuser -l ubuntu -c 'cp ~/.local/bin/mise /tmp/mise && sudo mv /tmp/mise /usr/local/bin/mise'
-  
+  - runuser -l ubuntu -c 'mkdir -p ~/.local/bin && cp ~/.local/bin/mise /tmp/mise && sudo mv /tmp/mise /usr/local/bin/mise'
+
   # Install uv as ubuntu user
   - runuser -l ubuntu -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'
-  - runuser -l ubuntu -c 'sudo mv uv /usr/local/bin/uv'
-  
+  - runuser -l ubuntu -c 'mkdir -p ~/.local/bin && sudo mv uv /usr/local/bin/uv'
+
   # Install bun as ubuntu user
   - runuser -l ubuntu -c 'curl -fsSL https://bun.sh/install | bash -s -- --yes'
-  
+  - runuser -l ubuntu -c 'echo "export PATH=\$HOME/.bun/bin:\$PATH" >> ~/.bashrc'
+
   # Install additional development tools using cargo and npm
-  # Ensure cargo and npm environment for ubuntu user:
   - runuser -l ubuntu -c 'cargo install fd-find ripgrep'
   - runuser -l ubuntu -c 'npm install -g fzf'
-  
+
   # Configure CloudWatch agent
   - systemctl enable amazon-cloudwatch-agent
   - systemctl start amazon-cloudwatch-agent
-  
+
+  # Apply audit rules
+  - augenrules --load
+  - systemctl restart auditd
+
   # Security configurations
   - systemctl restart ssh
   - systemctl enable fail2ban
   - systemctl start fail2ban
   - aideinit
   - mv /var/lib/aide/aide.db.new /var/lib/aide/aide.db
-  
+
   # Create management scripts directory
   - mkdir -p /opt/ubuntu-box/scripts
   - chown -R ubuntu:ubuntu /opt/ubuntu-box
-  
+
   # Final permissions setup
   - chown -R ubuntu:ubuntu /home/ubuntu
   - chmod 755 /usr/local/bin/*
-  
+
   # Setup automatic security updates
   - echo "APT::Periodic::Update-Package-Lists \"1\";" > /etc/apt/apt.conf.d/20auto-upgrades
   - echo "APT::Periodic::Unattended-Upgrade \"1\";" >> /etc/apt/apt.conf.d/20auto-upgrades
