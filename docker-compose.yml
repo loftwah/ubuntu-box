@@ -1,0 +1,30 @@
+services:
+  ubuntu-box:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+      target: final
+    volumes:
+      - .:/app
+      - ~/.aws:/root/.aws:ro
+      - ~/.ssh:/root/.ssh:ro
+      - uv_cache:/root/.cache/uv
+      - bun_cache:/root/.bun/install/cache
+      - go_cache:/go/pkg/mod
+    environment:
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-ap-southeast-2}
+      - DEBIAN_FRONTEND=noninteractive
+      - PATH="/app/.venv/bin:/usr/local/go/bin:/root/.bun/bin:${PATH}"
+    ports:
+      - "3000:3000"  # Node.js/Bun
+      - "8000:8000"  # Python
+      - "9000:9000"  # Go
+    tty: true
+    stdin_open: true
+    command: /bin/bash
+    container_name: ubuntu-box-2025
+
+volumes:
+  uv_cache:
+  bun_cache:
+  go_cache:

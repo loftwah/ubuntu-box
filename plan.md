@@ -32,13 +32,7 @@ VERIFIED = Can SSH in, use all dev tools, run security scan, mount EFS
 
 Milestone: Local container development ready
 
-1. **Docker Setup**
-
-   - Docker Engine installation
-   - Docker configuration
-   - User permissions
-
-2. **Container Build**
+1. **Container Build**
    - Base Dockerfile with Ubuntu 24.04
    - Development tools layer
    - Runtime environments layer
