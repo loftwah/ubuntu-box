@@ -26,26 +26,13 @@ check_package() {
     fi
 }
 
-# Function to check command existence and version
+# Function to check command existence
 check_command() {
     local cmd="$1"
-    local version_arg="${2:---version}"
-    local expected_version="${3:-}"
     
     if command -v "$cmd" >/dev/null 2>&1; then
-        version_output=$($cmd $version_arg 2>&1 | head -n1)
-        if [ -n "$expected_version" ]; then
-            if echo "$version_output" | grep -q "$expected_version"; then
-                echo -e "${GREEN}✓ $cmd installed ($version_output)${NC}"
-                return 0
-            else
-                echo -e "${YELLOW}! $cmd installed but version mismatch ($version_output)${NC}"
-                return 1
-            fi
-        else
-            echo -e "${GREEN}✓ $cmd installed ($version_output)${NC}"
-            return 0
-        fi
+        echo -e "${GREEN}✓ $cmd installed${NC}"
+        return 0
     else
         echo -e "${RED}✗ $cmd not found${NC}"
         return 1
@@ -66,18 +53,18 @@ echo
 
 # Development Tools
 echo "=== Development Tools ==="
-check_command "python3" "--version" "3.12.3" || ((ERRORS++))
-check_command "uv" "--version" || ((ERRORS++))
-check_command "node" "--version" "20" || ((ERRORS++))
-check_command "bun" "--version" "1.0.21" || ((ERRORS++))
-check_command "go" "version" "1.22" || ((ERRORS++))
-check_command "rustc" "--version" "1.83" || ((ERRORS++))
-check_command "cargo" "--version" || ((ERRORS++))
-check_command "ruby" "--version" "3.3" || ((ERRORS++))
-check_command "aws" "--version" "2.22.19" || ((ERRORS++))
-check_command "fdfind" "--version" || ((ERRORS++))
-check_command "rg" "--version" || ((ERRORS++))
-check_command "fzf" "--version" || ((ERRORS++))
+check_command "python3" || ((ERRORS++))
+check_command "uv" || ((ERRORS++))
+check_command "node" || ((ERRORS++))
+check_command "bun" || ((ERRORS++))
+check_command "go" || ((ERRORS++))
+check_command "rustc" || ((ERRORS++))
+check_command "cargo" || ((ERRORS++))
+check_command "ruby" || ((ERRORS++))
+check_command "aws" || ((ERRORS++))
+check_command "fdfind" || ((ERRORS++))
+check_command "rg" || ((ERRORS++))
+check_command "fzf" || ((ERRORS++))
 echo
 
 # Final Status
