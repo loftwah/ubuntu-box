@@ -66,7 +66,7 @@ echo
 
 # Development Tools
 echo "=== Development Tools ==="
-check_command "python" "--version" "3.12" || ((ERRORS++))
+check_command "python3" "--version" "3.12.3" || ((ERRORS++))
 check_command "uv" "--version" || ((ERRORS++))
 check_command "node" "--version" "20" || ((ERRORS++))
 check_command "bun" "--version" "1.0.21" || ((ERRORS++))
