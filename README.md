@@ -169,9 +169,16 @@ An alternative to the EC2 deployment, this Docker-based environment provides the
    ```
 
 3. **Connect to the container:**
+
    ```bash
    docker compose exec ubuntu-box bash
    ```
+
+4. **Verify everything is installed**
+
+```bash
+verify
+```
 
 ### Features
 
