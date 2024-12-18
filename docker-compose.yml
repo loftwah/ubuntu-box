@@ -3,7 +3,6 @@ services:
     build: 
       context: .
       dockerfile: Dockerfile
-      target: final
     volumes:
       - .:/app
       - ~/.aws:/root/.aws:ro

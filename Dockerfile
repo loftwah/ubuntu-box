@@ -1,101 +1,94 @@
-# Start with Ubuntu 24.04 (Noble Numbat)
-FROM ubuntu:24.04 AS base
+FROM ubuntu:24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-# Install base system packages
 RUN apt-get update && apt-get install -y \
-    curl \
-    wget \
-    git \
-    vim \
-    nano \
-    build-essential \
-    gcc \
-    g++ \
-    make \
-    apt-transport-https \
-    ca-certificates \
-    gnupg \
-    lsb-release \
-    pkg-config \
-    libssl-dev \
-    zlib1g-dev \
-    jq \
-    yq \
-    htop \
-    ncdu \
-    zip \
-    unzip \
-    tree \
-    tmux \
-    imagemagick \
-    fd-find \
-    fzf \
-    ripgrep \
-    libffi-dev \
-    libyaml-dev \
+    curl wget git vim nano build-essential gcc g++ make \
+    apt-transport-https ca-certificates gnupg lsb-release \
+    pkg-config libssl-dev zlib1g-dev jq yq htop ncdu zip unzip tree tmux \
+    fd-find fzf ripgrep libffi-dev libyaml-dev \
+    python3 python3-pip python3-venv \
+    autoconf bison libreadline-dev libncurses5-dev libgdbm-dev libdb-dev \
+    libbrotli-dev libexpat1-dev libxml2-dev libxslt1-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Python+UV
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS python
-WORKDIR /python-build
-ENV UV_COMPILE_BYTECODE=1
-ENV UV_LINK_MODE=copy
+WORKDIR /tmp
 
-# Bun
-FROM oven/bun:1.0.21 AS bun
+##################################
+# Install uv
+##################################
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Node.js
-FROM node:20 AS node
+##################################
+# Install Bun
+##################################
+RUN curl -fsSL https://bun.sh/install | bash \
+    && echo 'export BUN_INSTALL="$HOME/.bun"' >> ~/.bashrc \
+    && echo 'export PATH="$BUN_INSTALL/bin:$PATH"' >> ~/.bashrc
 
-# Go
-FROM golang:1.22-bookworm AS golang
+ENV BUN_INSTALL="/root/.bun"
+ENV PATH="/root/.bun/bin:${PATH}"
 
-# Ruby
-FROM ruby:3.3 AS ruby
+##################################
+# Install Node.js 20 (via NodeSource)
+##################################
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
 
-# Final image
-FROM base AS final
+##################################
+# Install Go 1.22
+##################################
+ARG GO_VERSION=1.22.10
+RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o go.tar.gz \
+    && tar -C /usr/local -xzf go.tar.gz \
+    && rm go.tar.gz
 
-# Python+UV
-COPY --from=python /usr/local/bin/python* /usr/local/bin/
-COPY --from=python /usr/local/bin/uv /usr/local/bin/
-ENV PATH="/app/.venv/bin:${PATH}"
-
-# Bun
-COPY --from=bun /usr/local/bin/bun /usr/local/bin/
-COPY --from=bun /usr/local/bin/bunx /usr/local/bin/
-
-# Node.js
-COPY --from=node /usr/local/bin/node /usr/local/bin/
-COPY --from=node /usr/local/bin/npm /usr/local/bin/
-COPY --from=node /usr/local/bin/npx /usr/local/bin/
-
-# Go
-COPY --from=golang /usr/local/go /usr/local/go
 ENV PATH="/usr/local/go/bin:${PATH}"
 
-# Ruby
-COPY --from=ruby /usr/local/bin/ruby* /usr/local/bin/
-COPY --from=ruby /usr/local/lib /usr/local/lib
-RUN ldconfig
-ENV PATH="/usr/local/bundle/bin:${PATH}"
-
-# Install Rust directly in the final image
+##################################
+# Install Rust (stable)
+##################################
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
+RUN rustup default stable
 
+##################################
+# Install Ruby 3.3.0 from source
+##################################
+ARG RUBY_VERSION=3.3.0
+RUN curl -fsSL "https://cache.ruby-lang.org/pub/ruby/3.3/ruby-${RUBY_VERSION}.tar.gz" -o ruby.tar.gz \
+    && tar -xzf ruby.tar.gz \
+    && cd ruby-${RUBY_VERSION} \
+    && ./configure --disable-install-doc \
+    && make -j$(nproc) \
+    && make install \
+    && cd .. \
+    && rm -rf ruby-${RUBY_VERSION} ruby.tar.gz
+
+# Install Bundler
+RUN gem install bundler \
+    && bundle --version
+
+##################################
 # Install AWS CLI v2
+##################################
 RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" \
     && unzip awscliv2.zip \
     && ./aws/install \
     && rm -rf aws awscliv2.zip
 
+##################################
+# Create a working directory and copy verify script if needed
+##################################
 WORKDIR /app
-
-# Add verification script
 COPY verify.sh /usr/local/bin/verify
 RUN chmod +x /usr/local/bin/verify
+
+##################################
+# Final PATH Adjustments
+##################################
+# Python's venv bin, bun, go, rustc, ruby, node, uv, etc. should all be in PATH now.
+# Bundler is installed, so 'bundle' is on PATH.
 
 CMD ["bash"]
