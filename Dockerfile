@@ -1,10 +1,9 @@
 # Start with Ubuntu 24.04 (Noble Numbat)
-FROM ubuntu:24.04 as base
+FROM ubuntu:24.04 AS base
 
-# Prevent interactive prompts
 ARG DEBIAN_FRONTEND=noninteractive
 
-# Install base system packages (matching EC2 environment)
+# Install base system packages
 RUN apt-get update && apt-get install -y \
     curl \
     wget \
@@ -38,41 +37,54 @@ RUN apt-get update && apt-get install -y \
     libyaml-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Get official Python+UV
+# Python+UV
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS python
 WORKDIR /python-build
 ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
 
-# Get official Bun
+# Bun
 FROM oven/bun:1.0.21 AS bun
 
-# Get official Node.js
+# Node.js
 FROM node:20 AS node
 
-# Get official Go
+# Go
 FROM golang:1.22-bookworm AS golang
 
-# Back to our Ubuntu base for final image
+# Ruby
+FROM ruby:3.3 AS ruby
+
+# Final image
 FROM base AS final
 
-# Copy from Python+UV
+# Python+UV
 COPY --from=python /usr/local/bin/python* /usr/local/bin/
 COPY --from=python /usr/local/bin/uv /usr/local/bin/
-ENV PATH="/app/.venv/bin:$PATH"
+ENV PATH="/app/.venv/bin:${PATH}"
 
-# Copy from Bun
+# Bun
 COPY --from=bun /usr/local/bin/bun /usr/local/bin/
 COPY --from=bun /usr/local/bin/bunx /usr/local/bin/
 
-# Copy from Node.js
+# Node.js
 COPY --from=node /usr/local/bin/node /usr/local/bin/
 COPY --from=node /usr/local/bin/npm /usr/local/bin/
 COPY --from=node /usr/local/bin/npx /usr/local/bin/
 
-# Copy from Go
+# Go
 COPY --from=golang /usr/local/go /usr/local/go
 ENV PATH="/usr/local/go/bin:${PATH}"
+
+# Ruby
+COPY --from=ruby /usr/local/bin/ruby* /usr/local/bin/
+COPY --from=ruby /usr/local/lib /usr/local/lib
+RUN ldconfig
+ENV PATH="/usr/local/bundle/bin:${PATH}"
+
+# Install Rust directly in the final image
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Install AWS CLI v2
 RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" \
@@ -80,12 +92,10 @@ RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2
     && ./aws/install \
     && rm -rf aws awscliv2.zip
 
-# Create working directory
 WORKDIR /app
 
-# Create and set up verify script
+# Add verification script
 COPY verify.sh /usr/local/bin/verify
 RUN chmod +x /usr/local/bin/verify
 
-# Default command
 CMD ["bash"]
