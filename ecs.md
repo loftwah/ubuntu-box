@@ -614,4 +614,4 @@ resource "aws_appautoscaling_target" "ecs_scaling_target" {
 
 ---
 
-By following these steps, configurations, and best practices, you can confidently migrate from Docker Compose to a fully managed, scalable, secure, and SOC 2-aligned ECS Fargate environment. This guide ensures that all details—versions, credential actions, Terraform configurations, secrets management, and compliance measures—are accurately represented and up-to-date.
+By following these steps, configurations, and best practices, you can confidently migrate from Docker Compose to a fully managed, scalable, secure, and SOC 2-aligned ECS Fargate environment. This guide ensures that all details, versions, credential actions, Terraform configurations, secrets management, and compliance measures are accurately represented and up-to-date.
