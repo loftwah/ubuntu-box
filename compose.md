@@ -293,7 +293,7 @@ nmap -p 42069 network-tools
 
 ## Best Practices for Compose Files
 
-1. **Use `.env` Files**: Keep environment variables in a `.env` file to maintain a clean `docker-compose.yml`. Docker Compose automatically loads a `.env` file located in the same directory as the `docker-compose.yml`. However, **these variables will not automatically appear in your app unless explicitly referenced in your `docker-compose.yml` file or passed to your app's configuration**.
+1. **Use \*\***`.env`\***\* Files**: Keep environment variables in a `.env` file to maintain a clean `docker-compose.yml`. Docker Compose automatically loads a `.env` file located in the same directory as the `docker-compose.yml`. However, **these variables will not automatically appear in your app unless explicitly referenced in your \*\***`docker-compose.yml`\***\* file or passed to your app's configuration**.
 
    ### Example `.env` File:
 
@@ -310,9 +310,9 @@ nmap -p 42069 network-tools
      app:
        image: myapp:latest
        environment:
-         - DB_USER=${DB_USER} # Passed to the container from .env
-         - DB_PASSWORD=${DB_PASSWORD} # Passed to the container from .env
-         - APP_ENV=${APP_ENV} # Passed to the container from .env
+         - DB_USER=${DB_USER:-defaultuser} # Passed to the container from .env or uses default
+         - DB_PASSWORD=${DB_PASSWORD:-defaultpassword} # Passed to the container from .env or uses default
+         - APP_ENV=${APP_ENV:-development} # Passed to the container from .env or uses default
        ports:
          - "8080:8080"
    ```
@@ -341,6 +341,7 @@ nmap -p 42069 network-tools
 
    - Variables in the `.env` file (e.g., `DB_USER`, `DB_PASSWORD`, `APP_ENV`) are automatically loaded by Docker Compose if the `.env` file is present in the same directory.
    - Using `env_file` in `docker-compose.yml` loads the entire file, while specifying individual variables in the `environment` section allows for selective usage.
+   - The `${VARIABLE:-default}` syntax can be used to provide default values if a variable is missing from the `.env` file.
    - Command-line options like `--env-file` can override the default `.env` file and load a custom one.
    - **Important**: Even though `.env` is automatically loaded, the variables will not appear in the running container unless explicitly passed in the Compose file or via the command line.
 
@@ -362,6 +363,7 @@ nmap -p 42069 network-tools
    ```
 
 3. **Health Checks**: Ensure services are ready:
+
    ```yaml
    services:
      app:
@@ -371,10 +373,13 @@ nmap -p 42069 network-tools
          timeout: 5s
          retries: 3
    ```
+
 4. **Modular Compose Files**:  
    Split configurations into multiple files (`docker-compose.yml` for core, `docker-compose.test.yml` for testing, etc.) and combine them with `docker compose -f` options.
+
 5. **Resource Limits**:  
    Simulate production constraints:
+
    ```yaml
    services:
      app:
