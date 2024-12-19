@@ -85,24 +85,12 @@ Consider adding a Python application (listening on `8000`) and front it with NGI
 
 ```mermaid
 flowchart LR
-    Browser((Browser))
-    Nginx((NGINX)):::proxy
-    App((App)):::app
-    UbuntuBox((ubuntu-box)):::dev
-    LocustMaster((Locust Master)):::load
-    LocustWorker((Locust Worker)):::load
-
-    Browser -->|HTTP:8080| Nginx
-    Nginx -->|Reverse Proxy:80->8000| App
-    LocustMaster -->|HTTP Tests| Nginx
-    LocustWorker -->|Join Tests| LocustMaster
-    UbuntuBox -->|Network Tools| App
+    Browser((Browser)) -->|HTTP:8080| Nginx((NGINX))
+    Nginx -->|Reverse Proxy:80->8000| App((App))
+    LocustMaster((Locust Master)) -->|HTTP Tests| Nginx
+    LocustWorker((Locust Worker)) -->|Join Tests| LocustMaster
+    UbuntuBox((ubuntu-box)) -->|Network Tools| App
     UbuntuBox -->|Network Tools| Nginx
-
-    classDef proxy fill=#d2f0ff,stroke=#333,stroke-width=1px;
-    classDef app fill=#d2ffd2,stroke=#333,stroke-width=1px;
-    classDef dev fill=#fff6d2,stroke=#333,stroke-width=1px;
-    classDef load fill=#ffd2d2,stroke=#333,stroke-width=1px;
 ```
 
 **Configuration Example**:
