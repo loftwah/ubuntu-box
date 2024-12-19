@@ -393,38 +393,34 @@ Store Terraform state in S3 and use DynamoDB for state locking to ensure safe, c
 
 ## CI/CD Pipeline with GitHub Actions
 
-Use GitHub Actions for automated deployments. Updated versions:
+This example shows how to use GitHub Actions to deploy AWS resources using Terraform. It uses OpenID Connect (OIDC) to obtain temporary AWS credentials at runtime, which means you do not need to store long-term AWS keys in GitHub.
 
-- `actions/checkout@v4`
-- `aws-actions/configure-aws-credentials@v4`
+**Before You Begin:**
 
-**Key Environment Variables:**
+1. **Create an IAM Role in AWS:**  
+   You must create an IAM role in your AWS account that:
 
-- After `configure-aws-credentials` runs, it sets `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN` as environment variables. It also sets `AWS_REGION` (or `AWS_DEFAULT_REGION`). These are available to subsequent steps like `terraform apply`, ensuring secure and temporary credentials without hardcoding.
+   - Trusts GitHub as an identity provider.
+   - Grants the necessary permissions for Terraform to manage your infrastructure.  
+     Once you have created this role, note its Amazon Resource Name (ARN), such as `arn:aws:iam::123456789012:role/MyDeployRole`.
 
-**Inline Session Policies:**
+2. **Configure OIDC Trust in AWS:**  
+   Set up an Identity Provider in IAM using GitHub's OIDC endpoint. This tells AWS to trust GitHub Actions workflows from your repository.
 
-- With `aws-actions/configure-aws-credentials@v4`, you can apply an inline session policy to limit scope:
+3. **Update Your Workflow Permissions:**  
+   In your GitHub Actions workflow file, you must grant `id-token: write` and `contents: read` permissions so that GitHub can request and provide the OIDC token to AWS.
 
-  ```yaml
-  uses: aws-actions/configure-aws-credentials@v4
-  with:
-    role-to-assume: arn:aws:iam::123456789012:role/MyRole
-    inline-session-policy: >-
-      {
-        "Version": "2012-10-17",
-        "Statement": [
-          {
-            "Sid":"Stmt1",
-            "Effect":"Allow",
-            "Action":"s3:List*",
-            "Resource":"*"
-          }
-        ]
-      }
-  ```
+**Tools Used:**
 
-This grants only the listed actions (e.g., `s3:List*`) during the session, improving security and SOC 2 alignment.
+- `actions/checkout@v4`: Checks out your repository code.
+- `aws-actions/configure-aws-credentials@v4`: Assumes the IAM role you created in AWS using OIDC, retrieving short-lived credentials.
+- `hashicorp/setup-terraform@v3`: Installs the Terraform CLI so you can run `terraform` commands in your pipeline.
+
+**Inline Session Policy (Optional):**
+
+If you want to further restrict what the temporary credentials can do beyond what the IAM role allows, you can provide an inline session policy. This is optional. If you do not need this granularity, remove the policy. For example, if your Terraform configuration reads state from S3, you might limit the workflow to only list objects in S3, reducing the risk of unintended actions.
+
+If you do not need S3 permissions or extra restrictions, simply remove this block.
 
 **Example GitHub Actions Workflow:**
 
@@ -434,26 +430,33 @@ on:
   push:
     branches: ["main"]
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      # Step 1: Check out the repository
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Ensures full history if needed
+          fetch-depth: 0
 
+      # Step 2: Configure AWS credentials using the IAM role you created in AWS
+      # Replace the ARN below with the ARN of the IAM role you created.
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::123456789012:role/MyDeployRole
           aws-region: ap-southeast-2
+          role-to-assume: arn:aws:iam::123456789012:role/MyDeployRole
           inline-session-policy: >-
             {
               "Version": "2012-10-17",
               "Statement": [
                 {
-                  "Sid": "Stmt1",
+                  "Sid": "ListS3Only",
                   "Effect": "Allow",
                   "Action": "s3:List*",
                   "Resource": "*"
@@ -461,20 +464,27 @@ jobs:
               ]
             }
 
+      # Step 3: Install Terraform (version 1.1.7 as recommended by the README)
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.1.7"
+
+      # Step 4: Initialize Terraform to set up modules and providers
       - name: Terraform Init
         run: terraform init
 
+      # Step 5: Apply Terraform configuration to manage AWS resources
       - name: Terraform Apply
         run: terraform apply -auto-approve
 ```
 
-This pipeline:
+**What This Pipeline Does:**
 
-- Checks out the code using `actions/checkout@v4`.
-- Configures AWS credentials with `aws-actions/configure-aws-credentials@v4`, setting secure environment variables and applying an inline session policy for limited permissions.
-- Runs Terraform commands using the temporary credentials from the action.
-
----
+1. **Checks out your code** so Terraform can read your configuration.
+2. **Assumes your pre-created IAM role** using GitHub OIDC. You must have created this role and configured it in AWS beforehand. The pipeline does not create it for you.
+3. **Optionally applies an inline session policy** to restrict permissions further. If you do not need this, remove it.
+4. **Installs Terraform and runs your Terraform commands**. The Terraform CLI uses the temporary AWS credentials, so no hardcoded secrets are required.
 
 ## Observability and Monitoring
 
