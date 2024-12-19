@@ -162,6 +162,97 @@ resource "aws_ecs_service" "daemon_example" {
 
 ---
 
+## **Monitoring ECS Containers with ECS Exec**
+
+Amazon ECS Exec provides a secure and simple way to interact directly with containers running in ECS tasks. This feature enables debugging, monitoring, and managing containers without needing to expose network ports or SSH access.
+
+### **Enabling ECS Exec in Terraform**
+
+To use ECS Exec, enable it in the ECS service definition and provide appropriate IAM permissions.
+
+#### **Example Service Configuration**
+
+```hcl
+resource "aws_ecs_service" "example_exec" {
+  name            = "example-exec"
+  cluster         = aws_ecs_cluster.example.id
+  task_definition = aws_ecs_task_definition.example.arn
+  desired_count   = 1
+  enable_execute_command = true
+
+  network_configuration {
+    subnets         = aws_subnet.private_subnets[*].id
+    security_groups = [aws_security_group.service_sg.id]
+  }
+}
+```
+
+#### **IAM Policy for ECS Exec**
+
+Ensure the task execution role includes permissions for ECS Exec:
+
+```hcl
+resource "aws_iam_policy" "ecs_exec_policy" {
+  name = "ecs-exec-policy"
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "ssmmessages:CreateControlChannel",
+          "ssmmessages:CreateDataChannel",
+          "ssmmessages:OpenControlChannel",
+          "ssmmessages:OpenDataChannel"
+        ],
+        Resource = "*"
+      }
+    ]
+  })
+}
+```
+
+Attach this policy to the task execution role or a role assumed by the user managing ECS Exec.
+
+### **Using ECS Exec**
+
+1. **Install the Required AWS CLI Version**:
+   Ensure you have AWS CLI version 2.4.0 or later:
+
+   ```bash
+   aws --version
+   ```
+
+2. **Execute a Command Inside the Container**:
+   Use the following command to connect to a container:
+
+   ```bash
+   aws ecs execute-command \
+       --cluster my-cluster \
+       --task <task-id> \
+       --container my-container \
+       --interactive \
+       --command "/bin/bash"
+   ```
+
+3. **Monitor Logs or Processes**:
+   For example, monitor running processes inside the container:
+
+   ```bash
+   ps aux
+   ```
+
+   Check application logs:
+
+   ```bash
+   tail -f /var/log/app.log
+   ```
+
+4. **Debug Networking Issues**:
+   Use common tools like `ping`, `curl`, or `traceroute` to diagnose connectivity problems.
+
+---
+
 ## **Connect Scripts**
 
 ### **Single-Task Connect Script**
@@ -257,28 +348,18 @@ SERVICE="my-service"
 aws ecs describe-services --cluster $CLUSTER --services $SERVICE --query "services[0].events" --output table
 ```
 
-### **4. Advanced Connection Script**
+---
 
-#### **Description**:
+## **Best Practices**
 
-Adds filtering options to connect only to specific services or containers.
+1. **Use Infrastructure as Code**:
+   - Define all resources in Terraform.
+   - Store state in an S3 bucket with DynamoDB locking.
+2. **Centralised Secrets Management**:
+   - Use AWS SSM or Secrets Manager for secure access.
+3. **Enable Monitoring**:
+   - Configure CloudWatch for logs and alarms.
+4. **Refine Access Controls**:
+   - Ensure security groups and IAM policies follow the principle of least privilege.
 
-```bash
-#!/bin/bash
-set -euo pipefail
-
-CLUSTER="my-cluster"
-SERVICE_NAME="my-service"
-
-TASKS=$(aws ecs list-tasks --cluster $CLUSTER --service-name $SERVICE_NAME --query "taskArns" --output json | jq -r '.[]')
-if [ -z "$TASKS" ]; then
-  echo "No running tasks for service: $SERVICE_NAME"
-  exit 1
-fi
-
-for TASK in $TASKS; do
-  CONTAINERS=$(aws ecs describe-tasks --cluster $CLUSTER --tasks $TASK --query "tasks[0].containers[*].name" --output json | jq -r '.[]')
-  for CONTAINER in $CONTAINERS; do
-    echo "Connecting to task: $TASK,
-
-```
+---
