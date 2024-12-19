@@ -1,27 +1,40 @@
 # Migrating from Docker Compose to AWS ECS with Fargate
 
-This guide explains how to move your existing Docker Compose setup into AWS ECS running on Fargate. It covers the entire lifecycle: building Docker images and pushing them to ECR, defining ECS Task Definitions and Services, integrating an Application Load Balancer (ALB), connecting to RDS Postgres and ElastiCache Redis, managing secrets via SSM Parameter Store, and using IAM roles for secure access. It also discusses ECS Exec for container debugging, multi-architecture image builds, Terraform automation, and recommended best practices.
+This guide explains how to migrate from a Docker Compose setup to AWS ECS Fargate. It covers building and pushing Docker images to ECR, creating ECS Task Definitions and Services, integrating an ALB, connecting to RDS Postgres and ElastiCache Redis, managing secrets with SSM Parameter Store and Secrets Manager, using IAM roles for secure access, ECS Exec for debugging, multi-architecture image builds, Terraform automation, Cloudflare integration for HTTPS, SOC 2 considerations, and best practices. It also details a CI/CD pipeline using GitHub Actions with updated versions and session policies.
 
 ---
 
 ## Key Technologies and Versions
 
-- **Amazon RDS (PostgreSQL)**: Uses PostgreSQL `16.1`
-- **Amazon ElastiCache (Redis)**: Uses Redis `7.2`
-- **AWS ECS Fargate**: Uses platform version `1.5.0`
-- **Terraform AWS Provider**: Uses version `5.80.0`
-- **Nginx Docker Image**: Uses `nginx:1.25.2`
-- **Ruby (Rails) Docker Image**: Uses `ruby:3.3.0` as a base
+- **Amazon RDS (PostgreSQL)**: `16.1`
+- **Amazon ElastiCache (Redis)**: `7.2`
+- **AWS ECS Fargate**: Platform version `1.5.0`
+- **Terraform AWS Provider**: `5.81.0` (updated to ensure current accuracy)
+- **Nginx Docker Image**: `nginx:1.25.2`
+- **Ruby (Rails) Docker Image**: `ruby:3.3.0`
 
-Keeping everything current ensures you benefit from the latest performance enhancements, security patches, and new features. Verify compatibility with your application before upgrading these components in production.
+Keep components current for performance, security, and new features. Test upgrades in a non-production environment first.
+
+---
+
+## Architecture Overview
+
+**High-Level Setup:**
+
+- **ECR**: Store built images for ECS.
+- **ECS Fargate**: Run Rails, Sidekiq, and Nginx containers without managing servers.
+- **ALB (Application Load Balancer)**: Terminate HTTPS (with ACM certificates) and forward traffic to ECS tasks.
+- **RDS (Postgres)** and **ElastiCache (Redis)**: Fully managed database and caching services.
+- **Secrets Management**: SSM Parameter Store for static secrets, Secrets Manager for dynamic/critical secrets.
+- **IAM Roles**: Grant ECS tasks least-privilege access to AWS services.
+- **Cloudflare Integration**: Use Cloudflare as DNS/CDN, Full (Strict) SSL mode to ensure end-to-end encryption.
+- **SOC 2 Compliance**: Encryption in transit, secure secrets management, auditing (CloudTrail), least privilege.
 
 ---
 
 ## ECR (Elastic Container Registry)
 
-You will store your Docker images in ECR so that ECS can pull them for deployment.
-
-**Example Terraform Configuration:**
+**Terraform Example:**
 
 ```hcl
 resource "aws_ecr_repository" "my_app" {
@@ -35,36 +48,30 @@ resource "aws_ecr_repository" "my_app" {
    ```bash
    aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin <account_id>.dkr.ecr.ap-southeast-2.amazonaws.com/my-app
    ```
-2. Update your Dockerfile base images to use `ruby:3.3.0` and `nginx:1.25.2`.
-
-3. Build and push a multi-architecture image:
+2. Update Dockerfile base images to `ruby:3.3.0` and `nginx:1.25.2`.
+3. Build and push multi-architecture image:
    ```bash
    docker buildx create --use
-   docker buildx build --platform linux/amd64,linux/arm64 -t <account_id>.dkr.ecr.ap-southeast-2.amazonaws.com/my-app:latest . --push
+   docker buildx build --platform linux/amd64,linux/arm64 \
+     -t <account_id>.dkr.ecr.ap-southeast-2.amazonaws.com/my-app:latest . --push
    ```
 
 ---
 
 ## IAM Roles and Permissions
 
-IAM roles enable your ECS tasks to securely access AWS services without embedding sensitive credentials directly into your code or configurations.
-
-### Example: Task Execution Role
-
-Below is an example of an IAM role configured for ECS task execution:
+**Task Execution Role Example:**
 
 ```hcl
 resource "aws_iam_role" "task_execution_role" {
   name               = "ecsTaskExecutionRole"
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
-    Statement = [
-      {
-        Action    = "sts:AssumeRole",
-        Effect    = "Allow",
-        Principal = { Service = "ecs-tasks.amazonaws.com" }
-      },
-    ]
+    Statement = [{
+      Action    = "sts:AssumeRole",
+      Effect    = "Allow",
+      Principal = { Service = "ecs-tasks.amazonaws.com" }
+    }]
   })
 
   inline_policy {
@@ -92,59 +99,80 @@ resource "aws_iam_role" "task_execution_role" {
 }
 ```
 
-### Purpose of This Role
+**Purpose:**
 
-This role is configured to enable the following capabilities for ECS tasks:
+- Pull images from ECR.
+- Send logs to CloudWatch.
+- Retrieve secrets from SSM and Secrets Manager.
 
-- **Pull container images from Amazon ECR**: Permissions allow fetching and authenticating container images required for deployment.
-- **Send logs to CloudWatch Logs**: Grants tasks the ability to create log streams and publish log events, ensuring observability.
-- **Retrieve secrets and configuration parameters**:
-  - **SSM Parameter Store**: Permissions for `ssm:GetParameter` allow secure retrieval of application configurations stored in Parameter Store.
-  - **AWS Secrets Manager**: Permissions for `secretsmanager:GetSecretValue` let tasks securely access sensitive data, such as API keys or database credentials, managed by Secrets Manager.
+This adheres to least privilege, a key SOC 2 principle.
 
-### How Secrets and Parameters Are Delivered to ECS Tasks
+---
 
-Once the IAM role is assigned to the ECS task execution role and the necessary permissions are granted:
+## Secrets Management: SSM Parameter Store & Secrets Manager
 
-1. **SSM Parameter Store Integration**:
+**When to Use SSM Parameter Store:**
 
-   - In the ECS task definition, you can specify SSM parameters in the `secrets` block.
-   - Example:
-     ```hcl
-     secrets = [
-       {
-         name      = "API_SECRET_KEY"
-         valueFrom = "arn:aws:ssm:ap-southeast-2:123456789012:parameter/my-secret-key"
-       }
-     ]
-     ```
-     During task execution, ECS automatically fetches the specified parameters using the `GetParameter` action.
+- Static configs (API keys without rotation needs)
+- Cost-sensitive scenarios
+- Hierarchical organization
 
-2. **Secrets Manager Integration**:
+**When to Use Secrets Manager:**
 
-   - Similarly, Secrets Manager secrets are defined in the ECS task definition `secrets` block.
-   - Example:
-     ```hcl
-     secrets = [
-       {
-         name      = "DB_PASSWORD"
-         valueFrom = "arn:aws:secretsmanager:ap-southeast-2:123456789012:secret:my-db-password"
-       }
-     ]
-     ```
-     ECS retrieves the secret value securely at runtime using the `GetSecretValue` action.
+- Dynamic or critical secrets (e.g., DB passwords)
+- Automatic rotation
+- Detailed auditing
 
-3. **Runtime Availability**:
-   - The retrieved secrets and parameters are injected into the container environment as environment variables, with the names specified in the `secrets` block.
-   - Containers can access these values securely without hardcoding sensitive information.
+**SSM Parameter Example:**
 
-This eliminates the need for hardcoding credentials or storing sensitive information in task definitions, ensuring secure, dynamic access during runtime.
+```hcl
+resource "aws_ssm_parameter" "api_secret_key" {
+  name  = "/myapp/api_secret_key"
+  type  = "SecureString"
+  value = var.api_secret_key
+}
+```
 
-By configuring IAM roles, SSM parameters, and Secrets Manager secrets together, ECS tasks maintain secure and efficient access to necessary resources.
+**ECS Task Definition Using SSM:**
+
+```hcl
+secrets = [
+  {
+    name      = "API_SECRET_KEY"
+    valueFrom = aws_ssm_parameter.api_secret_key.arn
+  }
+]
+```
+
+**Secrets Manager Example:**
+
+```hcl
+resource "aws_secretsmanager_secret" "db_password" {
+  name = "my-db-password"
+}
+
+resource "aws_secretsmanager_secret_version" "db_password_version" {
+  secret_id     = aws_secretsmanager_secret.db_password.id
+  secret_string = var.db_password
+}
+```
+
+**ECS Task Definition Using Secrets Manager:**
+
+```hcl
+secrets = [
+  {
+    name      = "DB_PASSWORD"
+    valueFrom = aws_secretsmanager_secret.db_password.arn
+  }
+]
+```
+
+At runtime, ECS injects these secrets as environment variables, keeping sensitive data secure and compliant with SOC 2.
+
+---
 
 ## ECS Task Definitions
-
-The ECS Task Definition specifies containers, resources, environment variables, ports, and secrets.
 
 **Example:**
 
@@ -213,11 +241,9 @@ resource "aws_ecs_task_definition" "my_app" {
 
 ---
 
-## RDS (Postgres)
+## RDS (PostgreSQL)
 
-Amazon RDS provides a managed PostgreSQL database. Using PostgreSQL 16.1 offers the latest features and optimizations. Ensure your application is compatible before upgrading.
-
-**RDS Postgres Example:**
+**Example:**
 
 ```hcl
 resource "aws_db_instance" "mydb" {
@@ -241,31 +267,29 @@ resource "aws_db_instance" "mydb" {
 
 ## ElastiCache (Redis)
 
-ElastiCache provides a managed Redis cluster. Version 7.2 includes performance and security improvements.
-
-**Redis Example:**
+**Example:**
 
 ```hcl
 resource "aws_elasticache_replication_group" "myredis" {
-  replication_group_id = "my-redis"
-  description          = "Redis for my-app"
-  engine               = "redis"
-  engine_version       = "7.2"
-  node_type            = "cache.t3.micro"
+  replication_group_id  = "my-redis"
+  description           = "Redis for my-app"
+  engine                = "redis"
+  engine_version        = "7.2"
+  node_type             = "cache.t3.micro"
   number_cache_clusters = 1
-  parameter_group_name = "default.redis7.2"
-  subnet_group_name    = aws_elasticache_subnet_group.default.name
-  security_group_ids   = [aws_security_group.redis_sg.id]
+  parameter_group_name  = "default.redis7.2"
+  subnet_group_name     = aws_elasticache_subnet_group.default.name
+  security_group_ids    = [aws_security_group.redis_sg.id]
 }
 ```
 
 ---
 
-## ECS Service Configuration and Fargate Platform Version
+## ECS Service and ALB Integration
 
-When defining your ECS service, specify the latest Fargate platform version (`1.5.0`) to use new features and improvements.
+Use the latest Fargate platform version (`1.5.0`) and integrate with an ALB for load balancing and health checks.
 
-**Example ECS Service with ALB:**
+**Example:**
 
 ```hcl
 resource "aws_ecs_service" "my_app_service" {
@@ -287,16 +311,42 @@ resource "aws_ecs_service" "my_app_service" {
     container_name   = "nginx"
     container_port   = 80
   }
+
+  deployment_minimum_healthy_percent = 50
+  deployment_maximum_percent         = 200
 }
 ```
 
 ---
 
+## HTTPS Termination and Cloudflare Integration
+
+- **ACM Certificate**: Obtain a valid SSL/TLS certificate via ACM for `loftwah.com` and `*.loftwah.com`.
+- **Cloudflare**: Set to "Full (Strict)" mode. Cloudflare encrypts traffic to the ALB, ensuring SOC 2 compliance by encrypting in transit.
+- **ALB HTTPS Listener**:
+
+  ```hcl
+  resource "aws_lb_listener" "https" {
+    load_balancer_arn = aws_lb.my_lb.arn
+    port              = 443
+    protocol          = "HTTPS"
+    ssl_policy        = "ELBSecurityPolicy-TLS-1-2-2017-01"
+    certificate_arn   = aws_acm_certificate.my_cert.arn
+
+    default_action {
+      type             = "forward"
+      target_group_arn = aws_lb_target_group.app_tg.arn
+    }
+  }
+  ```
+
+---
+
 ## ECS Exec
 
-ECS Exec allows you to run commands inside containers without exposing extra ports.
+ECS Exec allows in-container debugging without exposing SSH ports.
 
-**IAM Policy for ECS Exec:**
+**IAM Policy:**
 
 ```hcl
 resource "aws_iam_policy" "ecs_exec_policy" {
@@ -305,8 +355,8 @@ resource "aws_iam_policy" "ecs_exec_policy" {
     Version = "2012-10-17",
     Statement = [
       {
-        Effect = "Allow",
-        Action = [
+        Effect  = "Allow",
+        Action  = [
           "ssmmessages:CreateControlChannel",
           "ssmmessages:CreateDataChannel",
           "ssmmessages:OpenControlChannel",
@@ -319,109 +369,170 @@ resource "aws_iam_policy" "ecs_exec_policy" {
 }
 ```
 
-Attach this policy to the role that initiates `execute-command`.
-
----
-
-## SSM Parameter Store
-
-Use SSM Parameter Store to securely store secrets, like API keys or database passwords, instead of hardcoding them in code.
-
-**Parameter Example:**
-
-```hcl
-resource "aws_ssm_parameter" "api_secret_key" {
-  name        = "/myapp/api_secret_key"
-  type        = "SecureString"
-  value       = var.api_secret_key
-}
-```
-
-Refer to this parameter in your ECS task definition’s `secrets` block.
-
----
-
-## Scripts and Automation
-
-**Build and Push Script:**
-
-```bash
-#!/bin/bash
-set -euo pipefail
-
-REGION="ap-southeast-2"
-REPO_NAME="my-app"
-ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-REPO_URI="$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$REPO_NAME"
-
-aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $REPO_URI
-docker buildx build --platform linux/amd64,linux/arm64 -t $REPO_URI:latest . --push
-```
-
-**Force New Deployment Script:**
-
-```bash
-#!/bin/bash
-set -euo pipefail
-
-CLUSTER="my-cluster"
-SERVICE="my-service"
-
-aws ecs update-service --cluster $CLUSTER --service $SERVICE --force-new-deployment
-```
-
-**Monitor Service Events:**
-
-```bash
-#!/bin/bash
-set -euo pipefail
-
-CLUSTER="my-cluster"
-SERVICE="my-service"
-
-aws ecs describe-services --cluster $CLUSTER --services $SERVICE --query "services[0].events" --output table
-```
-
 ---
 
 ## Terraform AWS Provider Configuration
 
-Ensure you use the latest Terraform AWS provider version:
+**Example:**
 
 ```hcl
 terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "5.80.0"
+      version = "5.81.0"
     }
   }
   required_version = ">= 1.5.0"
 }
 ```
 
+Store Terraform state in S3 and use DynamoDB for state locking to ensure safe, collaborative changes.
+
+---
+
+## CI/CD Pipeline with GitHub Actions
+
+Use GitHub Actions for automated deployments. Updated versions:
+
+- `actions/checkout@v4`
+- `aws-actions/configure-aws-credentials@v4`
+
+**Key Environment Variables:**
+
+- After `configure-aws-credentials` runs, it sets `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN` as environment variables. It also sets `AWS_REGION` (or `AWS_DEFAULT_REGION`). These are available to subsequent steps like `terraform apply`, ensuring secure and temporary credentials without hardcoding.
+
+**Inline Session Policies:**
+
+- With `aws-actions/configure-aws-credentials@v4`, you can apply an inline session policy to limit scope:
+
+  ```yaml
+  uses: aws-actions/configure-aws-credentials@v4
+  with:
+    role-to-assume: arn:aws:iam::123456789012:role/MyRole
+    inline-session-policy: >-
+      {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid":"Stmt1",
+            "Effect":"Allow",
+            "Action":"s3:List*",
+            "Resource":"*"
+          }
+        ]
+      }
+  ```
+
+This grants only the listed actions (e.g., `s3:List*`) during the session, improving security and SOC 2 alignment.
+
+**Example GitHub Actions Workflow:**
+
+```yaml
+name: Deploy
+on:
+  push:
+    branches: ["main"]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Ensures full history if needed
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::123456789012:role/MyDeployRole
+          aws-region: ap-southeast-2
+          inline-session-policy: >-
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "Stmt1",
+                  "Effect": "Allow",
+                  "Action": "s3:List*",
+                  "Resource": "*"
+                }
+              ]
+            }
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
+```
+
+This pipeline:
+
+- Checks out the code using `actions/checkout@v4`.
+- Configures AWS credentials with `aws-actions/configure-aws-credentials@v4`, setting secure environment variables and applying an inline session policy for limited permissions.
+- Runs Terraform commands using the temporary credentials from the action.
+
+---
+
+## Observability and Monitoring
+
+- **CloudWatch Logs and Metrics**: Central logging and monitoring.
+- **CloudWatch Alarms**: Trigger alerts for high CPU usage, memory usage, or unhealthy tasks.
+- **ALB Access Logs**: Store in S3 for auditing.
+- **ECS Exec**: On-demand debugging inside containers.
+
+---
+
+## Scaling and Health Checks
+
+- **ALB Health Checks**: Only route traffic to healthy tasks.
+- **ECS Autoscaling**: Scale services up/down based on CPU, memory, or custom metrics.
+
+**Example ECS Autoscaling:**
+
+```hcl
+resource "aws_appautoscaling_target" "ecs_scaling_target" {
+  service_namespace  = "ecs"
+  scalable_dimension = "ecs:service:DesiredCount"
+  resource_id        = "service/${aws_ecs_cluster.my_cluster.name}/${aws_ecs_service.my_app_service.name}"
+  min_capacity       = 1
+  max_capacity       = 10
+}
+```
+
+---
+
+## SOC 2 Compliance Considerations
+
+- **Encryption in Transit**: HTTPS via ALB, Cloudflare Full (Strict) mode.
+- **Encryption at Rest**: RDS, EBS, ElastiCache, and secrets encrypted with KMS.
+- **Least Privilege IAM**: Inline session policies and narrowly scoped roles.
+- **Auditing and Logging**: CloudTrail, CloudWatch logs, ALB logs, GitHub Actions logs.
+- **Vendor Compliance**: AWS holds SOC 2, ISO, and PCI certifications, aiding compliance.
+
 ---
 
 ## Best Practices
 
 1. **Infrastructure as Code**:  
-   Keep all resources defined in Terraform and store state remotely (e.g., S3 with DynamoDB locking).
-
+   Use Terraform for all resources. Store state in S3 with DynamoDB locks.
 2. **Secrets Management**:  
-   Use SSM Parameter Store or Secrets Manager to keep secrets out of code and configuration files.
-
+   Keep secrets out of code. Use SSM or Secrets Manager and reference in ECS tasks.
 3. **Secure Networking**:  
-   Run ECS tasks, RDS, and Redis in private subnets. Use security groups and ALBs for controlled inbound traffic.
-
+   Run ECS tasks, databases, and caches in private subnets. Restrict ingress via SGs and ALB.
 4. **Scaling and Health Checks**:  
-   Configure ALB health checks so only healthy tasks receive traffic. Use ECS autoscaling based on CPU/Memory usage or custom CloudWatch metrics.
-
+   Implement ALB health checks and ECS autoscaling for high availability and efficiency.
 5. **Observability and Debugging**:  
-   Use CloudWatch for logs and metrics. Use ECS Exec for on-demand debugging inside containers.
-
+   Use CloudWatch, ECS Exec, and logs to troubleshoot and ensure performance and stability.
 6. **Version Upgrades and Testing**:  
-   Test all version upgrades (Postgres 16.1, Redis 7.2, and Docker base images) in a staging environment before applying them to production. Review Terraform AWS provider release notes for any breaking changes.
+   Test Postgres 16.1, Redis 7.2, Nginx 1.25.2, and Ruby 3.3.0 in staging first.
+7. **CI/CD**:  
+   Automate deployments with GitHub Actions, using `actions/checkout@v4` and `aws-actions/configure-aws-credentials@v4` for secure credential management.
+8. **SOC 2 Alignment**:  
+   Encrypt data, enforce least privilege, audit changes, and maintain operational excellence.
 
 ---
 
-By following these steps and guidelines, you can smoothly migrate from Docker Compose to a fully managed, scalable, and secure ECS Fargate environment, leveraging the latest AWS and Terraform features.
+By following these steps, configurations, and best practices, you can confidently migrate from Docker Compose to a fully managed, scalable, secure, and SOC 2-aligned ECS Fargate environment. This guide ensures that all details—versions, credential actions, Terraform configurations, secrets management, and compliance measures—are accurately represented and up-to-date.
