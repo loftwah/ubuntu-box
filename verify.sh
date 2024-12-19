@@ -65,6 +65,11 @@ check_command "aws" || ((ERRORS++))
 check_command "fdfind" || ((ERRORS++))
 check_command "rg" || ((ERRORS++))
 check_command "fzf" || ((ERRORS++))
+check_command "nmap" || ((ERRORS++))
+check_command "ifconfig" || ((ERRORS++))
+check_command "traceroute" || ((ERRORS++))
+check_command "tcpdump" || ((ERRORS++))
+check_command "nvim" || ((ERRORS++))
 echo
 
 # Final Status

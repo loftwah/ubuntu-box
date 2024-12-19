@@ -31,6 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip python3-venv \
     autoconf bison libreadline-dev libncurses5-dev libgdbm-dev libdb-dev \
     libbrotli-dev libexpat1-dev libxml2-dev libxslt1-dev \
+    nmap net-tools traceroute tcpdump neovim \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /tmp
