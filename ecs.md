@@ -1,6 +1,6 @@
 # Migrating from Docker Compose to AWS ECS with Fargate Using Terraform
 
-This guide explains how to migrate a `docker-compose.yml` setup to AWS ECS with Fargate, incorporating key AWS features like Application Load Balancers (ALB), ECR repositories, IAM roles, RDS Postgres, Elasticache Redis, and SSM Parameter Store. It includes best practices for multi-architecture support, scripts for deployment, and Terraform for infrastructure automation.
+This guide explains how to migrate a `docker-compose.yml` setup to AWS ECS with Fargate, incorporating key AWS features like Application Load Balancers (ALB), ECR repositories, IAM roles, RDS Postgres, Elasticache Redis, and SSM Parameter Store. It includes practical examples for multi-service and single-task setups, multi-architecture support, scripts for deployment, and Terraform automation. The document goes into detailed configurations and best practices to ensure a smooth transition.
 
 ---
 
@@ -70,34 +70,41 @@ This guide explains how to migrate a `docker-compose.yml` setup to AWS ECS with 
 - **Terraform Example**:
   ```hcl
   resource "aws_ecs_task_definition" "my_app" {
-  execution_role_arn   = aws_iam_role.task_execution_role.arn
+    execution_role_arn   = aws_iam_role.task_execution_role.arn
     family                = "my-app"
     container_definitions = jsonencode([
       {
-        name      = "my-container"
+        name      = "rails-app"
         image     = "${aws_ecr_repository.my_app.repository_url}:latest"
         memory    = 512
         cpu       = 256
         essential = true
         portMappings = [
           {
-            containerPort = 8000
-            hostPort      = 8000
+            containerPort = 3000
+            hostPort      = 3000
           }
         ]
-        environment = [
-          { name = "AWS_DEFAULT_REGION", value = "ap-southeast-2" }
-        ]
-        secrets = [
-          { name = "DB_PASSWORD", valueFrom = "arn:aws:ssm:..." }
-        ]
-        logConfiguration = {
-          logDriver = "awslogs"
-          options = {
-            awslogs-group         = "/ecs/my-app"
-            awslogs-region        = "ap-southeast-2"
+      },
+      {
+        name      = "sidekiq-worker"
+        image     = "${aws_ecr_repository.my_app.repository_url}:latest"
+        memory    = 256
+        cpu       = 128
+        essential = false
+      },
+      {
+        name      = "nginx"
+        image     = "nginx:latest"
+        memory    = 128
+        cpu       = 64
+        essential = true
+        portMappings = [
+          {
+            containerPort = 80
+            hostPort      = 80
           }
-        }
+        ]
       }
     ])
   }
@@ -136,8 +143,8 @@ resource "aws_ecs_service" "example_alb" {
   }
   load_balancer {
     target_group_arn = aws_lb_target_group.example.arn
-    container_name   = "example-container"
-    container_port   = 8080
+    container_name   = "nginx"
+    container_port   = 80
   }
 }
 ```
@@ -153,88 +160,57 @@ resource "aws_ecs_service" "daemon_example" {
 }
 ```
 
-#### **External Deployment Controller**
+---
 
-```hcl
-resource "aws_ecs_service" "external_controller" {
-  name    = "external-controller-example"
-  cluster = aws_ecs_cluster.example.id
+## **Connect Scripts**
 
-  deployment_controller {
-    type = "EXTERNAL"
-  }
-}
+### **Single-Task Connect Script**
+
+#### **Use Case**
+
+- Debugging or managing a single container.
+
+#### **Example**
+
+- **Rails App Only**:
+
+```bash
+#!/bin/bash
+set -euo pipefail
+
+CLUSTER="my-cluster"
+TASK=$(aws ecs list-tasks --cluster $CLUSTER --query "taskArns[0]" --output text)
+aws ecs execute-command --cluster $CLUSTER --task $TASK --container rails-app --interactive --command "/bin/bash"
 ```
 
-#### **CloudWatch Deployment Alarms**
+### **Multi-Task Connect Script**
 
-```hcl
-resource "aws_ecs_service" "deployment_with_alarms" {
-  name    = "example-deployment-with-alarms"
-  cluster = aws_ecs_cluster.example.id
+#### **Use Case**
 
-  alarms {
-    enable   = true
-    rollback = true
-    alarm_names = [
-      aws_cloudwatch_metric_alarm.example.alarm_name
-    ]
-  }
-}
+- Debugging multi-service setups like Rails, Sidekiq, and Nginx.
+
+#### **Example**
+
+```bash
+#!/bin/bash
+set -euo pipefail
+
+CLUSTER="my-cluster"
+TASKS=$(aws ecs list-tasks --cluster $CLUSTER --query "taskArns" --output json | jq -r '.[]')
+
+if [ -z "$TASKS" ]; then
+  echo "No running tasks found in cluster $CLUSTER"
+  exit 1
+fi
+
+for TASK in $TASKS; do
+  CONTAINERS=$(aws ecs describe-tasks --cluster $CLUSTER --tasks $TASK --query "tasks[0].containers[*].name" --output json | jq -r '.[]')
+  for CONTAINER in $CONTAINERS; do
+    echo "Connecting to task: $TASK, container: $CONTAINER"
+    aws ecs execute-command --cluster $CLUSTER --task $TASK --container $CONTAINER --interactive --command "/bin/bash"
+  done
+done
 ```
-
-#### **Fargate Ephemeral Storage Encryption**
-
-```hcl
-resource "aws_kms_key" "ephemeral_storage_key" {
-  description             = "Fargate ephemeral storage encryption"
-  deletion_window_in_days = 7
-}
-
-resource "aws_ecs_cluster" "example" {
-  name = "example"
-
-  configuration {
-    managed_storage_configuration {
-      fargate_ephemeral_storage_kms_key_id = aws_kms_key.ephemeral_storage_key.id
-    }
-  }
-}
-```
-
-### 5. **SSM Parameter Store for Secrets**
-
-- **Purpose**: Securely store and access sensitive environment variables.
-- **Setup Example**:
-  ```bash
-  aws ssm put-parameter --name "/my-app/db-password" --value "my-secret-password" --type "SecureString"
-  ```
-- Reference in task definitions with `valueFrom`.
-
-### 6. **RDS Postgres and Elasticache Redis**
-
-- **RDS Example**:
-  ```hcl
-  resource "aws_db_instance" "postgres" {
-    engine            = "postgres"
-    instance_class    = "db.t3.micro"
-    allocated_storage = 20
-    name              = "mydb"
-    username          = "admin"
-    password          = "supersecret"
-    vpc_security_group_ids = [aws_security_group.rds_sg.id]
-  }
-  ```
-- **Elasticache Example**:
-  ```hcl
-  resource "aws_elasticache_cluster" "redis" {
-    cluster_id           = "my-redis"
-    engine               = "redis"
-    node_type            = "cache.t3.micro"
-    num_cache_nodes      = 1
-    parameter_group_name = "default.redis7.x"
-  }
-  ```
 
 ---
 
@@ -281,34 +257,28 @@ SERVICE="my-service"
 aws ecs describe-services --cluster $CLUSTER --services $SERVICE --query "services[0].events" --output table
 ```
 
-### **4. Connect Script**
+### **4. Advanced Connection Script**
+
+#### **Description**:
+
+Adds filtering options to connect only to specific services or containers.
 
 ```bash
 #!/bin/bash
 set -euo pipefail
 
 CLUSTER="my-cluster"
-TASK=$(aws ecs list-tasks --cluster $CLUSTER --query "taskArns[0]" --output text)
+SERVICE_NAME="my-service"
 
-aws ecs execute-command --cluster $CLUSTER --task $TASK --container my-container --interactive --command "/bin/bash"
+TASKS=$(aws ecs list-tasks --cluster $CLUSTER --service-name $SERVICE_NAME --query "taskArns" --output json | jq -r '.[]')
+if [ -z "$TASKS" ]; then
+  echo "No running tasks for service: $SERVICE_NAME"
+  exit 1
+fi
+
+for TASK in $TASKS; do
+  CONTAINERS=$(aws ecs describe-tasks --cluster $CLUSTER --tasks $TASK --query "tasks[0].containers[*].name" --output json | jq -r '.[]')
+  for CONTAINER in $CONTAINERS; do
+    echo "Connecting to task: $TASK,
+
 ```
-
----
-
-## **Best Practices**
-
-1. **Infrastructure as Code**:
-   - Use Terraform to define all AWS resources.
-   - Store Terraform state in an S3 bucket with DynamoDB for state locking.
-2. **Multi-Architecture Support**:
-   - Use Docker `buildx` to support ARM and x86 architectures.
-3. **Centralised Secrets Management**:
-   - Use SSM Parameter Store or AWS Secrets Manager for sensitive values.
-4. **Monitoring and Logging**:
-   - Use CloudWatch for ECS service logs and alarms.
-   - Implement dashboards for observability.
-5. **Security**:
-   - Use least-privilege IAM roles for tasks.
-   - Limit security group access to necessary IP ranges or VPCs.
-
----
