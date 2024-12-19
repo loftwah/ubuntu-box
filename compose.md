@@ -44,9 +44,9 @@ services:
       - DEBIAN_FRONTEND=noninteractive
       - PATH="/app/.venv/bin:/usr/local/go/bin:/root/.bun/bin:${PATH}"
     ports:
-      - "3000:3000"  # Example: Node.js or Bun-based service
-      - "8000:8000"  # Example: Python-based service (Flask, Django, etc.)
-      - "9000:9000"  # Example: Go-based service
+      - "3000:3000" # Example: Node.js or Bun-based service
+      - "8000:8000" # Example: Python-based service (Flask, Django, etc.)
+      - "9000:9000" # Example: Go-based service
     tty: true
     stdin_open: true
     command: /bin/bash
@@ -93,7 +93,11 @@ In a more complex setup, you might have a dedicated application service (e.g., a
 
 This setup mirrors a production environment where NGINX or another load balancer fronts your applications.
 
-#### Example Configuration
+#### Example Configuration with `index.html` and Explanation
+
+Here's an improved version that includes the handling of `index.html`, enhanced clarity, and explanation.
+
+---
 
 ```yaml
 services:
@@ -107,7 +111,7 @@ services:
     command: ["python3", "-m", "http.server", "8000"]
     expose:
       - "8000"
-    # The app is now reachable at http://app:8000 inside the docker network.
+    # The app is now reachable at http://app:8000 inside the Docker network.
 
   nginx:
     image: nginx:latest
@@ -117,6 +121,7 @@ services:
       - "8080:80"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./index.html:/usr/share/nginx/html/index.html:ro
     # NGINX listens on host:8080, and internally routes to app:8000.
 ```
 
@@ -135,7 +140,7 @@ http {
     default_type application/octet-stream;
 
     upstream backend {
-        server app:8000; # points to our 'app' service
+        server app:8000; # Points to the 'app' service running Python's HTTP server
     }
 
     server {
@@ -143,24 +148,63 @@ http {
         server_name localhost;
 
         location / {
-            proxy_pass http://backend;
+            proxy_pass http://backend; # Forward requests to the Python server
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        location /index.html {
+            root /usr/share/nginx/html; # Serve static index.html from this path
         }
     }
 }
 ```
 
-**What’s Happening?**
+---
 
-- The `app` service runs a basic Python HTTP server on port 8000.
-- NGINX is configured with an `upstream` block named `backend`, which points to `app:8000`.
-- When you access `http://localhost:8080`, NGINX receives the request and forwards it to `app`.
-- The application responds, and NGINX returns the result to the client.
-  
-This arrangement allows for adding features at the proxy layer (e.g., TLS termination, caching, request filtering) without modifying the application code.
+### What’s Happening?
+
+#### Services
+
+1. **App Service (`app`)**:
+
+   - Runs a basic Python HTTP server (`http.server`) on port `8000`.
+   - Serves files from the `working_dir` (`/app`), including `index.html` if present.
+
+2. **NGINX Service (`nginx`)**:
+   - Acts as a reverse proxy that listens on `host:8080` and forwards requests to the `app` service (`http://app:8000`).
+   - Also serves the `index.html` file directly from `/usr/share/nginx/html`.
+
+#### Configuration
+
+1. **Upstream Block**:
+
+   - The `upstream backend` block defines `app:8000` as the target for requests that reach NGINX.
+
+2. **Static File Handling**:
+
+   - The `location /index.html` block allows NGINX to serve `index.html` directly if it's placed in the volume-mounted directory (`/usr/share/nginx/html`).
+
+3. **Reverse Proxy**:
+   - The `proxy_pass http://backend` directive routes requests to the Python HTTP server.
+   - Headers such as `Host` and `X-Real-IP` are set to preserve client details.
 
 ---
+
+### Access Flow
+
+1. If you access `http://localhost:8080/index.html`, NGINX serves the `index.html` file directly.
+2. If you access `http://localhost:8080/`, NGINX forwards the request to the Python HTTP server, which serves files from the `app` service.
+3. NGINX acts as a mediator, enabling scalability, additional features, or security configurations like TLS.
+
+---
+
+### Why This Setup?
+
+- **Flexibility**: Combines NGINX's strengths (e.g., caching, static file serving, TLS) with Python's simplicity for dynamic file handling.
+- **Performance**: Serves static files (like `index.html`) directly via NGINX, reducing the load on the Python server.
+- **Extensibility**: Adds features at the proxy layer without modifying the application code.
 
 ### Load Testing with Locust
 
@@ -272,29 +316,28 @@ nmap -p 42069 network-tools
 ## Best Practices for Compose Files
 
 1. **Leverage `.env` Files**: Store environment-specific variables in a `.env` file. This keeps your `docker-compose.yml` cleaner and makes it easy to switch environments (development, staging, production) by changing only one file.
-   
 2. **Explicit Networks**:  
    By default, Compose services share a default network. For more complex setups, define named networks and assign services to them. This provides greater control over traffic flow and isolation.
-   
+
    ```yaml
    networks:
      internal_net:
      external_net:
-   
+
    services:
      app:
        networks:
          - internal_net
-   
+
      nginx:
        networks:
          - internal_net
          - external_net
    ```
-   
+
 3. **Health Checks**:  
    Implement health checks to ensure services are ready before others depend on them. For example:
-   
+
    ```yaml
    services:
      app:
@@ -304,20 +347,21 @@ nmap -p 42069 network-tools
          timeout: 5s
          retries: 3
    ```
-   
+
    NGINX or Locust can wait until `app` is healthy before starting load tests or proxying traffic.
-   
+
 4. **Separation of Concerns**:  
    Keep your Compose files modular. For instance:
+
    - `docker-compose.yml`: Core services (ubuntu-box, app, nginx).
    - `docker-compose.test.yml`: Testing services (locust, CI tools).
    - `docker-compose.network.yml`: Network analysis and debugging services.
-   
+
    You can combine them with `docker-compose -f docker-compose.yml -f docker-compose.test.yml up` as needed.
-   
+
 5. **Resource Limits**:  
    Consider setting CPU and memory limits to simulate production constraints and ensure each service behaves well under pressure:
-   
+
    ```yaml
    services:
      app:
@@ -334,23 +378,19 @@ nmap -p 42069 network-tools
 
 - **Integration with CI/CD**:  
   Integrate your Docker Compose stack with GitHub Actions, Jenkins, or GitLab CI to run tests and build artifacts in a controlled environment. The `ubuntu-box` environment ensures a consistent toolset.
-  
 - **Advanced Caching Strategies**:  
   Explore using Docker build cache and multi-stage builds for even faster iteration times. Storing dependencies in volumes as shown is a good start, but layering caches can reduce build times further.
-  
 - **Monitoring & Logging**:  
   Consider adding services like `Prometheus` and `Grafana` for metrics, or `Elastic Stack` (ELK) for centralized logging. This helps observe system health under load tests and during development.
-  
 - **Security Hardening**:  
   Review default credentials, mount points, and permissions. Use read-only mounts and ensure that sensitive files are not inadvertently exposed.
-  
 - **Scaling Out**:  
   Experiment with scaling services:
-  
+
   ```bash
   docker-compose up --scale locust-worker=5
   ```
-  
+
   This will start five Locust workers to increase load generation capabilities.
 
 ---
