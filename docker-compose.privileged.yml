@@ -22,6 +22,13 @@ services:
     stdin_open: true
     command: /bin/bash
     container_name: ubuntu-box-2025
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    network_mode: bridge
+    privileged: true  # Grants additional permissions
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Access to host network
 
 volumes:
   uv_cache:

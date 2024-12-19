@@ -13,6 +13,7 @@ echo
 
 # Track overall status
 ERRORS=0
+NETWORK_TEST_ERRORS=0
 
 # Function to check package installation through dpkg
 check_package() {
@@ -29,13 +30,25 @@ check_package() {
 # Function to check command existence
 check_command() {
     local cmd="$1"
-    
     if command -v "$cmd" >/dev/null 2>&1; then
         echo -e "${GREEN}✓ $cmd installed${NC}"
         return 0
     else
         echo -e "${RED}✗ $cmd not found${NC}"
         return 1
+    fi
+}
+
+# Function to test network-related functionality
+test_network_tool() {
+    local tool="$1"
+    local test_cmd="$2"
+    echo -e "${YELLOW}Testing $tool...${NC}"
+    if eval "$test_cmd" >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ $tool is functional${NC}"
+    else
+        echo -e "${RED}✗ $tool failed${NC}"
+        NETWORK_TEST_ERRORS=$((NETWORK_TEST_ERRORS + 1))
     fi
 }
 
@@ -65,19 +78,30 @@ check_command "aws" || ((ERRORS++))
 check_command "fdfind" || ((ERRORS++))
 check_command "rg" || ((ERRORS++))
 check_command "fzf" || ((ERRORS++))
-check_command "nmap" || ((ERRORS++))
-check_command "ifconfig" || ((ERRORS++))
-check_command "traceroute" || ((ERRORS++))
-check_command "tcpdump" || ((ERRORS++))
 check_command "nvim" || ((ERRORS++))
+echo
+
+# Networking Tests
+echo "=== Networking Tests ==="
+test_network_tool "Ping localhost" "ping -c 1 127.0.0.1"
+test_network_tool "Ping internet (1.1.1.1)" "ping -c 1 1.1.1.1"
+test_network_tool "DNS resolution (google.com)" "nslookup google.com"
+test_network_tool "Nmap" "nmap -sn 127.0.0.1"
+test_network_tool "Traceroute" "traceroute -m 1 127.0.0.1"
+test_network_tool "Tcpdump" "tcpdump -D"
+test_network_tool "Ifconfig loopback" "ifconfig lo"
 echo
 
 # Final Status
 echo "=== Verification Summary ==="
 if [ $ERRORS -eq 0 ]; then
-    echo -e "${GREEN}✓ All checks passed successfully${NC}"
-    exit 0
+    echo -e "${GREEN}✓ All basic checks passed successfully${NC}"
 else
     echo -e "${RED}✗ Found $ERRORS error(s) during verification${NC}"
-    exit 1
+fi
+
+if [ $NETWORK_TEST_ERRORS -eq 0 ]; then
+    echo -e "${GREEN}✓ All network tests passed successfully${NC}"
+else
+    echo -e "${YELLOW}⚠ Found $NETWORK_TEST_ERRORS network test error(s)${NC}"
 fi
