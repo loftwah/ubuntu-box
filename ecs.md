@@ -47,9 +47,11 @@ resource "aws_ecr_repository" "my_app" {
 
 ## IAM Roles and Permissions
 
-IAM roles allow your ECS tasks to securely access required AWS services without hardcoding credentials.
+IAM roles enable your ECS tasks to securely access AWS services without embedding sensitive credentials directly into your code or configurations.
 
-**Task Execution Role Example:**
+### Example: Task Execution Role
+
+Below is an example of an IAM role configured for ECS task execution:
 
 ```hcl
 resource "aws_iam_role" "task_execution_role" {
@@ -90,9 +92,55 @@ resource "aws_iam_role" "task_execution_role" {
 }
 ```
 
-This role lets ECS tasks pull images from ECR, send logs to CloudWatch, and fetch secrets from SSM or Secrets Manager.
+### Purpose of This Role
 
----
+This role is configured to enable the following capabilities for ECS tasks:
+
+- **Pull container images from Amazon ECR**: Permissions allow fetching and authenticating container images required for deployment.
+- **Send logs to CloudWatch Logs**: Grants tasks the ability to create log streams and publish log events, ensuring observability.
+- **Retrieve secrets and configuration parameters**:
+  - **SSM Parameter Store**: Permissions for `ssm:GetParameter` allow secure retrieval of application configurations stored in Parameter Store.
+  - **AWS Secrets Manager**: Permissions for `secretsmanager:GetSecretValue` let tasks securely access sensitive data, such as API keys or database credentials, managed by Secrets Manager.
+
+### How Secrets and Parameters Are Delivered to ECS Tasks
+
+Once the IAM role is assigned to the ECS task execution role and the necessary permissions are granted:
+
+1. **SSM Parameter Store Integration**:
+
+   - In the ECS task definition, you can specify SSM parameters in the `secrets` block.
+   - Example:
+     ```hcl
+     secrets = [
+       {
+         name      = "API_SECRET_KEY"
+         valueFrom = "arn:aws:ssm:ap-southeast-2:123456789012:parameter/my-secret-key"
+       }
+     ]
+     ```
+     During task execution, ECS automatically fetches the specified parameters using the `GetParameter` action.
+
+2. **Secrets Manager Integration**:
+
+   - Similarly, Secrets Manager secrets are defined in the ECS task definition `secrets` block.
+   - Example:
+     ```hcl
+     secrets = [
+       {
+         name      = "DB_PASSWORD"
+         valueFrom = "arn:aws:secretsmanager:ap-southeast-2:123456789012:secret:my-db-password"
+       }
+     ]
+     ```
+     ECS retrieves the secret value securely at runtime using the `GetSecretValue` action.
+
+3. **Runtime Availability**:
+   - The retrieved secrets and parameters are injected into the container environment as environment variables, with the names specified in the `secrets` block.
+   - Containers can access these values securely without hardcoding sensitive information.
+
+This eliminates the need for hardcoding credentials or storing sensitive information in task definitions, ensuring secure, dynamic access during runtime.
+
+By configuring IAM roles, SSM parameters, and Secrets Manager secrets together, ECS tasks maintain secure and efficient access to necessary resources.
 
 ## ECS Task Definitions
 
