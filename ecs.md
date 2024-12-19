@@ -486,6 +486,75 @@ jobs:
 3. **Optionally applies an inline session policy** to restrict permissions further. If you do not need this, remove it.
 4. **Installs Terraform and runs your Terraform commands**. The Terraform CLI uses the temporary AWS credentials, so no hardcoded secrets are required.
 
+## CI/CD with AWS CodeBuild and CodePipeline
+
+If you prefer using AWS-native services for CI/CD, you can leverage AWS CodeBuild and CodePipeline instead of GitHub Actions. This approach keeps all CI/CD operations within your AWS account, which some teams prefer for compliance, cost, or integration reasons.
+
+**High-Level Flow:**
+
+1. **CodeCommit or GitHub Source**:  
+   Store your infrastructure code in AWS CodeCommit or continue using GitHub as a source. If using GitHub, integrate it as a source stage in CodePipeline.
+
+2. **CodePipeline**:  
+   Set up a pipeline with stages like Source, Build, and Deploy. CodePipeline will:
+
+   - Retrieve code from your chosen source (GitHub or CodeCommit).
+   - Trigger a CodeBuild project to run Terraform commands.
+   - Optionally, have a Deploy stage to apply Terraform changes or run additional scripts.
+
+3. **CodeBuild**:  
+   CodeBuild will run in a containerized environment and can execute Terraform commands. You:
+   - Provide a buildspec.yml file that runs `terraform init` and `terraform apply`.
+   - Use an IAM role attached to the CodeBuild project so that Terraform can access AWS resources (no need for OIDC here since CodeBuild runs inside your AWS environment).
+
+**Example Buildspec for CodeBuild:**
+
+```yaml
+version: 0.2
+
+phases:
+  install:
+    commands:
+      - curl -o terraform.zip https://releases.hashicorp.com/terraform/1.1.7/terraform_1.1.7_linux_amd64.zip
+      - unzip terraform.zip && mv terraform /usr/local/bin/
+      - rm terraform.zip
+  pre_build:
+    commands:
+      - terraform init
+  build:
+    commands:
+      - terraform apply -auto-approve
+artifacts:
+  files:
+    - "**/*"
+```
+
+**What This Does:**
+
+1. **Source Stage (CodePipeline)**:  
+   Pulls the latest commit from your GitHub repo or CodeCommit repository.
+
+2. **Build Stage (CodePipeline with CodeBuild)**:  
+   Launches a CodeBuild container that:
+   - Installs Terraform (version 1.1.7 in this example).
+   - Runs `terraform init` to prepare for deployment.
+   - Runs `terraform apply -auto-approve` to provision or update resources.
+3. **Deploy Stage (Optional)**:  
+   If your infrastructure requires additional steps, CodePipeline can invoke more CodeBuild projects or Lambda functions.
+
+**IAM Considerations for CodeBuild and CodePipeline:**
+
+- Create and assign an IAM role to CodeBuild that grants the necessary permissions for Terraform to manage your AWS infrastructure.
+- Since CodeBuild runs inside AWS, you do not need OIDC or external credential configuration as you do with GitHub Actions. The IAM role attached to CodeBuild determines what Terraform can do.
+
+**When to Use CodeBuild/CodePipeline:**
+
+- If you want an entirely AWS-native CI/CD process.
+- If you prefer tight integration with AWS services and do not want to rely on GitHub Actions for your pipeline logic.
+- If compliance or organizational policies require that build and deploy processes run within your AWS environment.
+
+By using CodeBuild and CodePipeline, your Terraform CI/CD pipeline resides entirely inside AWS. You have no need for external tokens or roles outside AWS, as all credentials and permissions are managed natively through IAM roles assigned to your build and deploy stages.
+
 ## Observability and Monitoring
 
 - **CloudWatch Logs and Metrics**: Central logging and monitoring.
