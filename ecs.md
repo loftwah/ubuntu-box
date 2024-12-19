@@ -593,6 +593,188 @@ resource "aws_appautoscaling_target" "ecs_scaling_target" {
 
 ---
 
+## Networking in ECS vs Docker Compose
+
+When configuring services like **nginx** to communicate with an application backend (e.g., an `app` service) in **Docker Compose** or **Amazon ECS**, the networking behaviour differs significantly. Understanding these differences is crucial for a smooth migration or setup.
+
+### Docker Compose Networking
+
+In Docker Compose, each container runs in its own isolated network namespace. Communication between services is achieved via service names defined in the `docker-compose.yml` file, as Docker Compose automatically sets up an internal network with DNS resolution for service names. For example:
+
+```yaml
+services:
+  app:
+    build: ./app
+    ports:
+      - "8080:8080"
+  nginx:
+    build: ./nginx
+    ports:
+      - "80:80"
+    depends_on:
+      - app
+```
+
+In this setup:
+
+- The `nginx` service cannot use `localhost:8080` to communicate with the `app` service because `localhost` refers to the `nginx` container itself.
+- Instead, the `app` service must be referenced by its service name (`app:8080`) as defined in the Compose file.
+
+#### Example nginx Configuration in Docker Compose
+
+In the `nginx` configuration file, you would specify the backend service using its Compose service name, not `localhost`. For example:
+
+```nginx
+server {
+    listen 80;
+
+    location / {
+        proxy_pass http://app:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+### Amazon ECS Networking
+
+In Amazon ECS, the networking behaviour depends on the **network mode** and whether containers are running within the same **task definition**:
+
+#### Containers in the Same ECS Task
+
+When containers are part of the same task definition and launched using the **`awsvpc` network mode** (the most common mode for Fargate or EC2 launch types), they share the same network namespace. This means they can communicate with each other using `localhost`:
+
+- `nginx` can reference the `app` service at `localhost:8080` because both containers share the same network interface.
+
+#### Example nginx Configuration in ECS (Same Task)
+
+In this case, you can use `localhost` in the `nginx` configuration file:
+
+```nginx
+server {
+    listen 80;
+
+    location / {
+        proxy_pass http://localhost:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+#### Containers in Separate ECS Tasks
+
+If `nginx` and `app` are deployed in separate tasks:
+
+- `localhost` will not work because each task runs in its own isolated network namespace.
+- Communication must be established via an **external DNS name** or **ECS Service Discovery**.
+- For example, `nginx` can reference `app` using its DNS name (e.g., `app.example.local:8080`) or via a load balancer (e.g., `app-alb.example.com`).
+
+#### Example nginx Configuration in ECS (Separate Tasks)
+
+For tasks running separately, you would configure `nginx` to use the DNS name or load balancer of the `app` service:
+
+```nginx
+server {
+    listen 80;
+
+    location / {
+        proxy_pass http://app.example.local:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+### Managing Multiple nginx Configurations
+
+In scenarios where your deployment environments differ significantly (e.g., Docker Compose vs ECS), maintaining separate nginx configuration files, such as `nginx.conf.local` for Docker Compose and `nginx.conf.ecs` for ECS, is one approach. However, there are other, more streamlined methods to manage this:
+
+1. **Environment-Specific Variables**:
+   Use environment variables to dynamically set the backend address in the nginx configuration:
+
+   ```nginx
+   server {
+       listen 80;
+
+       location / {
+           proxy_pass http://$BACKEND_HOST:$BACKEND_PORT;
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+       }
+   }
+   ```
+
+   Then pass the appropriate values for `BACKEND_HOST` and `BACKEND_PORT` when running the container.
+
+   - For Docker Compose:
+
+     ```yaml
+     environment:
+       BACKEND_HOST: app
+       BACKEND_PORT: 8080
+     ```
+
+   - For ECS, use task definition environment variables or secrets to set these values.
+
+2. **Single Config with Conditional Logic**:
+   Use templating tools like [envsubst](https://www.gnu.org/software/gettext/manual/html_node/envsubst-Invocation.html) to generate the final configuration at runtime. For example:
+
+   ```bash
+   envsubst < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
+   ```
+
+   This allows you to maintain a single `nginx.conf.template` file that uses placeholders for dynamic values.
+
+   Note: The official nginx image does not include `envsubst` by default. To use it, you must create a custom image based on `nginx` that includes the required tools. Example Dockerfile:
+
+   ```dockerfile
+   FROM nginx:latest
+   RUN apt-get update && apt-get install -y gettext-base && rm -rf /var/lib/apt/lists/*
+   ```
+
+3. **Centralised Configuration Management**:
+   Use a configuration management tool like AWS Systems Manager Parameter Store or HashiCorp Consul to fetch the backend configuration dynamically. For example, you can configure nginx to resolve the backend address from a service discovery endpoint.
+
+4. **Docker Multi-Stage Builds**:
+   Include both configurations in your Docker image and copy the appropriate one based on a build argument or runtime environment variable:
+   ```dockerfile
+   ARG ENV
+   COPY nginx.conf.$ENV /etc/nginx/nginx.conf
+   ```
+   Then build or run with `--build-arg ENV=local` or `--build-arg ENV=ecs`.
+
+### Limitations of the Official nginx Image
+
+The official nginx Docker image is lightweight and does not include additional tools like `envsubst` or scripting utilities by default. This limits its flexibility for dynamic configuration:
+
+- **File Mounts**: You can mount configuration files into the container, but you must prepare the appropriate file beforehand, as the image does not support on-the-fly configuration generation.
+- **Environment Variables**: Direct usage of environment variables within the nginx configuration file is not supported without additional tools (e.g., `envsubst`).
+
+To overcome these limitations, consider:
+
+- Building a custom nginx image with the necessary tools installed (e.g., `gettext` for `envsubst`).
+- Using external tools or scripts during container startup to preprocess the nginx configuration file.
+- Transitioning to templating solutions or centralised configuration management.
+
+### Key Differences
+
+| Feature               | Docker Compose                              | Amazon ECS                                   |
+| --------------------- | ------------------------------------------- | -------------------------------------------- |
+| **Network Isolation** | Containers isolated by default              | Containers share namespace within a task     |
+| **Localhost Usage**   | Not valid for cross-container communication | Valid within the same task                   |
+| **Service Discovery** | Service name resolution (e.g., `app:8080`)  | DNS name or load balancer for separate tasks |
+
+### Example Use Case: nginx and app
+
+- **Docker Compose**: Configure nginx to use `app:8080` in its reverse proxy configuration.
+- **ECS (Same Task)**: Configure nginx to use `localhost:8080` for the app.
+- **ECS (Separate Tasks)**: Use ECS Service Discovery or an ALB to resolve the app’s DNS name, e.g., `app.example.local:8080`.
+
+By adapting the network configuration based on the environment, you ensure reliable communication between services in both Docker Compose and ECS setups.
+
+---
+
 ## Best Practices
 
 1. **Infrastructure as Code**:  
