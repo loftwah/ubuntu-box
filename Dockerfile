@@ -77,6 +77,14 @@ RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2
     && ./aws/install \
     && rm -rf aws awscliv2.zip
 
+# Add health check script
+COPY healthcheck.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/healthcheck.sh
+
+# Add health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+CMD ["/usr/local/bin/healthcheck.sh"]
+
 WORKDIR /app
 COPY verify.sh /usr/local/bin/verify
 RUN chmod +x /usr/local/bin/verify

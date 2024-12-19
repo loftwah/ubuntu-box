@@ -22,6 +22,12 @@ services:
     stdin_open: true
     command: /bin/bash
     container_name: ubuntu-box-2025
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
     cap_add:
       - NET_ADMIN
       - NET_RAW
