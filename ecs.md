@@ -34,6 +34,8 @@ Keep components current for performance, security, and new features. Test upgrad
 
 ## ECR (Elastic Container Registry)
 
+[aws_ecr_repository](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecr_repository)
+
 **Terraform Example:**
 
 ```hcl
@@ -59,6 +61,8 @@ resource "aws_ecr_repository" "my_app" {
 ---
 
 ## IAM Roles and Permissions
+
+[iam_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | [AWS managed policies for Amazon Elastic Container Service](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/security-iam-awsmanpol.html)
 
 **Task Execution Role Example:**
 
@@ -110,6 +114,8 @@ This adheres to least privilege, a key SOC 2 principle.
 ---
 
 ## Secrets Management: SSM Parameter Store & Secrets Manager
+
+[ssm_parameter](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | [secretsmanager_secret](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret) | [secretsmanager_secret_version](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret_version)
 
 **When to Use SSM Parameter Store:**
 
@@ -172,7 +178,11 @@ At runtime, ECS injects these secrets as environment variables, keeping sensitiv
 
 ---
 
+> **Note**: we could use 1password for this.
+
 ## ECS Task Definitions
+
+[ecs_task_definition](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_task_definition)
 
 **Example:**
 
@@ -243,6 +253,8 @@ resource "aws_ecs_task_definition" "my_app" {
 
 ## RDS (PostgreSQL)
 
+[db_instance](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/db_instance)
+
 **Example:**
 
 ```hcl
@@ -267,6 +279,8 @@ resource "aws_db_instance" "mydb" {
 
 ## ElastiCache (Redis)
 
+[elasticache_replication_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/elasticache_replication_group)
+
 **Example:**
 
 ```hcl
@@ -286,6 +300,8 @@ resource "aws_elasticache_replication_group" "myredis" {
 ---
 
 ## ECS Service and ALB Integration
+
+[ecs_service](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_service)
 
 Use the latest Fargate platform version (`1.5.0`) and integrate with an ALB for load balancing and health checks.
 
@@ -321,6 +337,8 @@ resource "aws_ecs_service" "my_app_service" {
 
 ## HTTPS Termination and Cloudflare Integration
 
+[lb_listener](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lb_listener)
+
 - **ACM Certificate**: Obtain a valid SSL/TLS certificate via ACM for `loftwah.com` and `*.loftwah.com`.
 - **Cloudflare**: Set to "Full (Strict)" mode. Cloudflare encrypts traffic to the ALB, ensuring SOC 2 compliance by encrypting in transit.
 - **ALB HTTPS Listener**:
@@ -343,6 +361,8 @@ resource "aws_ecs_service" "my_app_service" {
 ---
 
 ## ECS Exec
+
+[iam_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy)
 
 ECS Exec allows in-container debugging without exposing SSH ports.
 
@@ -372,6 +392,8 @@ resource "aws_iam_policy" "ecs_exec_policy" {
 ---
 
 ## Terraform AWS Provider Configuration
+
+[AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs) | [Cloudflare Provider](https://registry.terraform.io/providers/cloudflare/cloudflare/latest/docs)
 
 **Example:**
 
