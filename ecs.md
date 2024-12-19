@@ -1,195 +1,254 @@
-# Migrating from Docker Compose to AWS ECS with Fargate Using Terraform
+# Migrating from Docker Compose to AWS ECS with Fargate
 
-This guide explains how to migrate a `docker-compose.yml` setup to AWS ECS with Fargate, incorporating key AWS features like Application Load Balancers (ALB), ECR repositories, IAM roles, RDS Postgres, Elasticache Redis, and SSM Parameter Store. It includes practical examples for multi-service and single-task setups, multi-architecture support, scripts for deployment, and Terraform automation. The document goes into detailed configurations and best practices to ensure a smooth transition.
+This guide explains how to move your existing Docker Compose setup into AWS ECS running on Fargate. It covers the entire lifecycle: building Docker images and pushing them to ECR, defining ECS Task Definitions and Services, integrating an Application Load Balancer (ALB), connecting to RDS Postgres and ElastiCache Redis, managing secrets via SSM Parameter Store, and using IAM roles for secure access. It also discusses ECS Exec for container debugging, multi-architecture image builds, Terraform automation, and recommended best practices.
 
 ---
 
-## **Key Components**
+## Key Technologies and Versions
 
-### 1. **ECR (Elastic Container Registry)**
+- **Amazon RDS (PostgreSQL)**: Uses PostgreSQL `16.1`
+- **Amazon ElastiCache (Redis)**: Uses Redis `7.2`
+- **AWS ECS Fargate**: Uses platform version `1.5.0`
+- **Terraform AWS Provider**: Uses version `5.80.0`
+- **Nginx Docker Image**: Uses `nginx:1.25.2`
+- **Ruby (Rails) Docker Image**: Uses `ruby:3.3.0` as a base
 
-- **Purpose**: Host your Docker images for ECS.
-- **Steps**:
-  - Use Terraform to define an ECR repository:
-    ```hcl
-    resource "aws_ecr_repository" "my_app" {
-      name = "my-app"
-    }
-    ```
-  - Build and push Docker images using `buildx` for multi-architecture:
-    ```bash
-    docker buildx create --use
-    docker buildx build --platform linux/amd64,linux/arm64 -t <account_id>.dkr.ecr.<region>.amazonaws.com/my-app:latest . --push
-    ```
+Keeping everything current ensures you benefit from the latest performance enhancements, security patches, and new features. Verify compatibility with your application before upgrading these components in production.
 
-### 2. **Task Execution Role**
+---
 
-- **Purpose**: Provide ECS tasks with permissions to pull images and send logs.
-- **Terraform Example**:
+## ECR (Elastic Container Registry)
 
-  ```hcl
-  resource "aws_iam_role" "task_execution_role" {
-    name               = "ecsTaskExecutionRole"
-    assume_role_policy = jsonencode({
-      Version = "2012-10-17"
+You will store your Docker images in ECR so that ECS can pull them for deployment.
+
+**Example Terraform Configuration:**
+
+```hcl
+resource "aws_ecr_repository" "my_app" {
+  name = "my-app"
+}
+```
+
+**Build and Push Steps:**
+
+1. Authenticate Docker to ECR:
+   ```bash
+   aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin <account_id>.dkr.ecr.ap-southeast-2.amazonaws.com/my-app
+   ```
+2. Update your Dockerfile base images to use `ruby:3.3.0` and `nginx:1.25.2`.
+
+3. Build and push a multi-architecture image:
+   ```bash
+   docker buildx create --use
+   docker buildx build --platform linux/amd64,linux/arm64 -t <account_id>.dkr.ecr.ap-southeast-2.amazonaws.com/my-app:latest . --push
+   ```
+
+---
+
+## IAM Roles and Permissions
+
+IAM roles allow your ECS tasks to securely access required AWS services without hardcoding credentials.
+
+**Task Execution Role Example:**
+
+```hcl
+resource "aws_iam_role" "task_execution_role" {
+  name               = "ecsTaskExecutionRole"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Action    = "sts:AssumeRole",
+        Effect    = "Allow",
+        Principal = { Service = "ecs-tasks.amazonaws.com" }
+      },
+    ]
+  })
+
+  inline_policy {
+    name = "ecs-task-logging"
+    policy = jsonencode({
+      Version = "2012-10-17",
       Statement = [
         {
-          Action    = "sts:AssumeRole"
-          Effect    = "Allow"
-          Principal = { Service = "ecs-tasks.amazonaws.com" }
-        },
+          Action = [
+            "ecr:GetAuthorizationToken",
+            "ecr:BatchCheckLayerAvailability",
+            "ecr:GetDownloadUrlForLayer",
+            "ecr:BatchGetImage",
+            "logs:CreateLogStream",
+            "logs:PutLogEvents",
+            "ssm:GetParameter",
+            "secretsmanager:GetSecretValue"
+          ],
+          Effect   = "Allow",
+          Resource = "*"
+        }
       ]
     })
+  }
+}
+```
 
-    inline_policy {
-      name = "ecs-task-logging"
-      policy = jsonencode({
-        Version = "2012-10-17"
-        Statement = [
-          {
-            Action   = [
-              "ecr:GetAuthorizationToken",
-              "ecr:BatchCheckLayerAvailability",
-              "ecr:GetDownloadUrlForLayer",
-              "ecr:BatchGetImage",
-              "logs:CreateLogStream",
-              "logs:PutLogEvents"
-            ]
-            Effect   = "Allow"
-            Resource = "*"
-          },
-        ]
-      })
+This role lets ECS tasks pull images from ECR, send logs to CloudWatch, and fetch secrets from SSM or Secrets Manager.
+
+---
+
+## ECS Task Definitions
+
+The ECS Task Definition specifies containers, resources, environment variables, ports, and secrets.
+
+**Example:**
+
+```hcl
+resource "aws_ecs_task_definition" "my_app" {
+  family                   = "my-app"
+  execution_role_arn       = aws_iam_role.task_execution_role.arn
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = 512
+  memory                   = 1024
+
+  container_definitions = jsonencode([
+    {
+      name      = "rails-app"
+      image     = "${aws_ecr_repository.my_app.repository_url}:latest"
+      memory    = 512
+      cpu       = 256
+      essential = true
+      environment = [
+        {
+          name  = "DATABASE_URL"
+          value = "postgres://${var.db_user}:${var.db_password}@${aws_db_instance.mydb.address}:5432/${var.db_name}"
+        },
+        {
+          name  = "REDIS_URL"
+          value = "redis://${aws_elasticache_replication_group.myredis.primary_endpoint_address}:6379"
+        }
+      ]
+      secrets = [
+        {
+          name      = "API_SECRET_KEY"
+          valueFrom = aws_ssm_parameter.api_secret_key.arn
+        }
+      ]
+      portMappings = [
+        {
+          containerPort = 3000
+          hostPort      = 3000
+        }
+      ]
+    },
+    {
+      name      = "sidekiq-worker"
+      image     = "${aws_ecr_repository.my_app.repository_url}:latest"
+      memory    = 256
+      cpu       = 128
+      essential = false
+    },
+    {
+      name      = "nginx"
+      image     = "nginx:1.25.2"
+      memory    = 128
+      cpu       = 64
+      essential = true
+      portMappings = [
+        {
+          containerPort = 80
+          hostPort      = 80
+        }
+      ]
     }
-  }
-  ```
-
-### 3. **Task Definition**
-
-- **Purpose**: Define container runtime settings for ECS.
-- **Terraform Example**:
-  ```hcl
-  resource "aws_ecs_task_definition" "my_app" {
-    execution_role_arn   = aws_iam_role.task_execution_role.arn
-    family                = "my-app"
-    container_definitions = jsonencode([
-      {
-        name      = "rails-app"
-        image     = "${aws_ecr_repository.my_app.repository_url}:latest"
-        memory    = 512
-        cpu       = 256
-        essential = true
-        portMappings = [
-          {
-            containerPort = 3000
-            hostPort      = 3000
-          }
-        ]
-      },
-      {
-        name      = "sidekiq-worker"
-        image     = "${aws_ecr_repository.my_app.repository_url}:latest"
-        memory    = 256
-        cpu       = 128
-        essential = false
-      },
-      {
-        name      = "nginx"
-        image     = "nginx:latest"
-        memory    = 128
-        cpu       = 64
-        essential = true
-        portMappings = [
-          {
-            containerPort = 80
-            hostPort      = 80
-          }
-        ]
-      }
-    ])
-  }
-  ```
-
-### 4. **ECS Service Configuration Examples**
-
-#### **Basic Example**
-
-```hcl
-resource "aws_ecs_service" "example" {
-  name            = "example"
-  cluster         = aws_ecs_cluster.example.id
-  task_definition = aws_ecs_task_definition.example.arn
-  desired_count   = 2
-  launch_type     = "FARGATE"
-  network_configuration {
-    subnets         = aws_subnet.private_subnets[*].id
-    security_groups = [aws_security_group.service_sg.id]
-  }
-}
-```
-
-#### **Service with ALB Integration**
-
-```hcl
-resource "aws_ecs_service" "example_alb" {
-  name            = "example-with-alb"
-  cluster         = aws_ecs_cluster.example.id
-  task_definition = aws_ecs_task_definition.example.arn
-  launch_type     = "FARGATE"
-  desired_count   = 3
-  network_configuration {
-    subnets         = aws_subnet.private_subnets[*].id
-    security_groups = [aws_security_group.service_sg.id]
-  }
-  load_balancer {
-    target_group_arn = aws_lb_target_group.example.arn
-    container_name   = "nginx"
-    container_port   = 80
-  }
-}
-```
-
-#### **Daemon Scheduling Strategy**
-
-```hcl
-resource "aws_ecs_service" "daemon_example" {
-  name                = "example-daemon"
-  cluster             = aws_ecs_cluster.example.id
-  task_definition     = aws_ecs_task_definition.example.arn
-  scheduling_strategy = "DAEMON"
+  ])
 }
 ```
 
 ---
 
-## **Monitoring ECS Containers with ECS Exec**
+## RDS (Postgres)
 
-Amazon ECS Exec provides a secure and simple way to interact directly with containers running in ECS tasks. This feature enables debugging, monitoring, and managing containers without needing to expose network ports or SSH access.
+Amazon RDS provides a managed PostgreSQL database. Using PostgreSQL 16.1 offers the latest features and optimizations. Ensure your application is compatible before upgrading.
 
-### **Enabling ECS Exec in Terraform**
-
-To use ECS Exec, enable it in the ECS service definition and provide appropriate IAM permissions.
-
-#### **Example Service Configuration**
+**RDS Postgres Example:**
 
 ```hcl
-resource "aws_ecs_service" "example_exec" {
-  name            = "example-exec"
-  cluster         = aws_ecs_cluster.example.id
-  task_definition = aws_ecs_task_definition.example.arn
-  desired_count   = 1
+resource "aws_db_instance" "mydb" {
+  allocated_storage     = 20
+  max_allocated_storage = 100
+  engine                = "postgres"
+  engine_version        = "16.1"
+  instance_class        = "db.t3.micro"
+  db_name               = var.db_name
+  username              = var.db_user
+  password              = var.db_password
+  parameter_group_name  = "default.postgres16"
+  skip_final_snapshot   = true
+  publicly_accessible   = false
+  vpc_security_group_ids = [aws_security_group.db_sg.id]
+  db_subnet_group_name  = aws_db_subnet_group.default.name
+}
+```
+
+---
+
+## ElastiCache (Redis)
+
+ElastiCache provides a managed Redis cluster. Version 7.2 includes performance and security improvements.
+
+**Redis Example:**
+
+```hcl
+resource "aws_elasticache_replication_group" "myredis" {
+  replication_group_id = "my-redis"
+  description          = "Redis for my-app"
+  engine               = "redis"
+  engine_version       = "7.2"
+  node_type            = "cache.t3.micro"
+  number_cache_clusters = 1
+  parameter_group_name = "default.redis7.2"
+  subnet_group_name    = aws_elasticache_subnet_group.default.name
+  security_group_ids   = [aws_security_group.redis_sg.id]
+}
+```
+
+---
+
+## ECS Service Configuration and Fargate Platform Version
+
+When defining your ECS service, specify the latest Fargate platform version (`1.5.0`) to use new features and improvements.
+
+**Example ECS Service with ALB:**
+
+```hcl
+resource "aws_ecs_service" "my_app_service" {
+  name             = "my-app-service"
+  cluster          = aws_ecs_cluster.my_cluster.id
+  task_definition  = aws_ecs_task_definition.my_app.arn
+  desired_count    = 2
+  launch_type      = "FARGATE"
+  platform_version = "1.5.0"
   enable_execute_command = true
 
   network_configuration {
     subnets         = aws_subnet.private_subnets[*].id
     security_groups = [aws_security_group.service_sg.id]
   }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.app_tg.arn
+    container_name   = "nginx"
+    container_port   = 80
+  }
 }
 ```
 
-#### **IAM Policy for ECS Exec**
+---
 
-Ensure the task execution role includes permissions for ECS Exec:
+## ECS Exec
+
+ECS Exec allows you to run commands inside containers without exposing extra ports.
+
+**IAM Policy for ECS Exec:**
 
 ```hcl
 resource "aws_iam_policy" "ecs_exec_policy" {
@@ -212,119 +271,46 @@ resource "aws_iam_policy" "ecs_exec_policy" {
 }
 ```
 
-Attach this policy to the task execution role or a role assumed by the user managing ECS Exec.
-
-### **Using ECS Exec**
-
-1. **Install the Required AWS CLI Version**:
-   Ensure you have AWS CLI version 2.4.0 or later:
-
-   ```bash
-   aws --version
-   ```
-
-2. **Execute a Command Inside the Container**:
-   Use the following command to connect to a container:
-
-   ```bash
-   aws ecs execute-command \
-       --cluster my-cluster \
-       --task <task-id> \
-       --container my-container \
-       --interactive \
-       --command "/bin/bash"
-   ```
-
-3. **Monitor Logs or Processes**:
-   For example, monitor running processes inside the container:
-
-   ```bash
-   ps aux
-   ```
-
-   Check application logs:
-
-   ```bash
-   tail -f /var/log/app.log
-   ```
-
-4. **Debug Networking Issues**:
-   Use common tools like `ping`, `curl`, or `traceroute` to diagnose connectivity problems.
+Attach this policy to the role that initiates `execute-command`.
 
 ---
 
-## **Connect Scripts**
+## SSM Parameter Store
 
-### **Single-Task Connect Script**
+Use SSM Parameter Store to securely store secrets, like API keys or database passwords, instead of hardcoding them in code.
 
-#### **Use Case**
+**Parameter Example:**
 
-- Debugging or managing a single container.
-
-#### **Example**
-
-- **Rails App Only**:
-
-```bash
-#!/bin/bash
-set -euo pipefail
-
-CLUSTER="my-cluster"
-TASK=$(aws ecs list-tasks --cluster $CLUSTER --query "taskArns[0]" --output text)
-aws ecs execute-command --cluster $CLUSTER --task $TASK --container rails-app --interactive --command "/bin/bash"
+```hcl
+resource "aws_ssm_parameter" "api_secret_key" {
+  name        = "/myapp/api_secret_key"
+  type        = "SecureString"
+  value       = var.api_secret_key
+}
 ```
 
-### **Multi-Task Connect Script**
-
-#### **Use Case**
-
-- Debugging multi-service setups like Rails, Sidekiq, and Nginx.
-
-#### **Example**
-
-```bash
-#!/bin/bash
-set -euo pipefail
-
-CLUSTER="my-cluster"
-TASKS=$(aws ecs list-tasks --cluster $CLUSTER --query "taskArns" --output json | jq -r '.[]')
-
-if [ -z "$TASKS" ]; then
-  echo "No running tasks found in cluster $CLUSTER"
-  exit 1
-fi
-
-for TASK in $TASKS; do
-  CONTAINERS=$(aws ecs describe-tasks --cluster $CLUSTER --tasks $TASK --query "tasks[0].containers[*].name" --output json | jq -r '.[]')
-  for CONTAINER in $CONTAINERS; do
-    echo "Connecting to task: $TASK, container: $CONTAINER"
-    aws ecs execute-command --cluster $CLUSTER --task $TASK --container $CONTAINER --interactive --command "/bin/bash"
-  done
-done
-```
+Refer to this parameter in your ECS task definition’s `secrets` block.
 
 ---
 
-## **Automation Scripts**
+## Scripts and Automation
 
-### **1. Build and Push Script**
+**Build and Push Script:**
 
 ```bash
 #!/bin/bash
 set -euo pipefail
 
-# Variables
 REGION="ap-southeast-2"
 REPO_NAME="my-app"
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 REPO_URI="$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$REPO_NAME"
 
-# Authenticate and Build
 aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $REPO_URI
 docker buildx build --platform linux/amd64,linux/arm64 -t $REPO_URI:latest . --push
 ```
 
-### **2. Force Deploy Script**
+**Force New Deployment Script:**
 
 ```bash
 #!/bin/bash
@@ -336,7 +322,7 @@ SERVICE="my-service"
 aws ecs update-service --cluster $CLUSTER --service $SERVICE --force-new-deployment
 ```
 
-### **3. Monitor Script**
+**Monitor Service Events:**
 
 ```bash
 #!/bin/bash
@@ -350,16 +336,44 @@ aws ecs describe-services --cluster $CLUSTER --services $SERVICE --query "servic
 
 ---
 
-## **Best Practices**
+## Terraform AWS Provider Configuration
 
-1. **Use Infrastructure as Code**:
-   - Define all resources in Terraform.
-   - Store state in an S3 bucket with DynamoDB locking.
-2. **Centralised Secrets Management**:
-   - Use AWS SSM or Secrets Manager for secure access.
-3. **Enable Monitoring**:
-   - Configure CloudWatch for logs and alarms.
-4. **Refine Access Controls**:
-   - Ensure security groups and IAM policies follow the principle of least privilege.
+Ensure you use the latest Terraform AWS provider version:
+
+```hcl
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "5.80.0"
+    }
+  }
+  required_version = ">= 1.5.0"
+}
+```
 
 ---
+
+## Best Practices
+
+1. **Infrastructure as Code**:  
+   Keep all resources defined in Terraform and store state remotely (e.g., S3 with DynamoDB locking).
+
+2. **Secrets Management**:  
+   Use SSM Parameter Store or Secrets Manager to keep secrets out of code and configuration files.
+
+3. **Secure Networking**:  
+   Run ECS tasks, RDS, and Redis in private subnets. Use security groups and ALBs for controlled inbound traffic.
+
+4. **Scaling and Health Checks**:  
+   Configure ALB health checks so only healthy tasks receive traffic. Use ECS autoscaling based on CPU/Memory usage or custom CloudWatch metrics.
+
+5. **Observability and Debugging**:  
+   Use CloudWatch for logs and metrics. Use ECS Exec for on-demand debugging inside containers.
+
+6. **Version Upgrades and Testing**:  
+   Test all version upgrades (Postgres 16.1, Redis 7.2, and Docker base images) in a staging environment before applying them to production. Review Terraform AWS provider release notes for any breaking changes.
+
+---
+
+By following these steps and guidelines, you can smoothly migrate from Docker Compose to a fully managed, scalable, and secure ECS Fargate environment, leveraging the latest AWS and Terraform features.
