@@ -1,6 +1,6 @@
 # 🚀 Piping Server Transfer Scripts
 
-A suite of streamlined **bash scripts** leveraging the power of [Piping Server (ppng.io)](https://ppng.io) for **blazing-fast file transfers**. Choose your level of **security and functionality**—whether you're sharing cat memes or encrypting top-secret plans, we've got you covered.
+A suite of streamlined **bash scripts** leveraging the power of [Piping Server (ppng.io)](https://ppng.io) for **blazing-fast file transfers**. Choose your level of **security and functionality** whether you're sharing cat memes or encrypting top-secret plans, we've got you covered.
 
 ---
 
