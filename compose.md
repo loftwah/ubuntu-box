@@ -293,7 +293,57 @@ nmap -p 42069 network-tools
 
 ## Best Practices for Compose Files
 
-1. **Use `.env` Files**: Keep environment variables in a `.env` file to maintain a clean `docker-compose.yml`.
+1. **Use `.env` Files**: Keep environment variables in a `.env` file to maintain a clean `docker-compose.yml`. Docker Compose automatically loads a `.env` file located in the same directory as the `docker-compose.yml`. However, **these variables will not automatically appear in your app unless explicitly referenced in your `docker-compose.yml` file or passed to your app's configuration**.
+
+   ### Example `.env` File:
+
+   ```plaintext
+   DB_USER=myuser
+   DB_PASSWORD=mypassword
+   APP_ENV=production
+   ```
+
+   ### Example `docker-compose.yml` File (Individual Environment Variables):
+
+   ```yaml
+   services:
+     app:
+       image: myapp:latest
+       environment:
+         - DB_USER=${DB_USER} # Passed to the container from .env
+         - DB_PASSWORD=${DB_PASSWORD} # Passed to the container from .env
+         - APP_ENV=${APP_ENV} # Passed to the container from .env
+       ports:
+         - "8080:8080"
+   ```
+
+   ### Example `docker-compose.yml` File (Whole `.env` File):
+
+   ```yaml
+   services:
+     app:
+       image: myapp:latest
+       env_file:
+         - .env # Loads all variables from the .env file
+       ports:
+         - "8080:8080"
+   ```
+
+   ### Command-Line Method:
+
+   To pass environment variables from a custom `.env` file via the command line:
+
+   ```bash
+   docker compose --env-file custom.env up
+   ```
+
+   ### Key Explanation:
+
+   - Variables in the `.env` file (e.g., `DB_USER`, `DB_PASSWORD`, `APP_ENV`) are automatically loaded by Docker Compose if the `.env` file is present in the same directory.
+   - Using `env_file` in `docker-compose.yml` loads the entire file, while specifying individual variables in the `environment` section allows for selective usage.
+   - Command-line options like `--env-file` can override the default `.env` file and load a custom one.
+   - **Important**: Even though `.env` is automatically loaded, the variables will not appear in the running container unless explicitly passed in the Compose file or via the command line.
+
 2. **Named Networks**: For complex environments, define networks to isolate traffic:
 
    ```yaml
