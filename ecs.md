@@ -803,9 +803,11 @@ When working with AWS ECS Fargate, you need a local setup that mirrors the ECS e
 
 ---
 
+Yes, let me write a new version that incorporates the gotchas and practical considerations while maintaining the same structure:
+
 ### Leveraging `docker-compose.override.yml`
 
-The `docker-compose.override.yml` file allows you to customize local development settings without altering the main `docker-compose.yml`. It’s perfect for setting up environment-specific configurations like volumes, ports, and commands.
+The `docker-compose.override.yml` file provides a powerful but sometimes tricky way to customize your local development environment. Docker Compose automatically detects and merges this file with your base `docker-compose.yml` without requiring any flags. While this automatic behavior makes it perfect for development configurations, it can also lead to confusion if you're not aware of how the override system works.
 
 #### Base `docker-compose.yml`
 
@@ -893,7 +895,11 @@ volumes:
   bundle: # Add this to volumes section
 ```
 
----
+When working with these files, there are several important things to understand. The automatic merging can sometimes hide what configuration is actually running. To see the final, merged configuration that Docker Compose will use, run `docker compose config`. This is especially useful when joining a project or debugging unexpected behavior.
+
+Since `docker-compose.override.yml` is typically gitignored, you might see a `docker-compose.override.yml.example` file in repositories. This example file shows the expected local development settings that you can copy and customize. If you're experiencing unexpected behavior, remember that you can bypass the override file entirely by explicitly specifying just the base file: `docker compose -f docker-compose.yml up`.
+
+Environment variables add another layer of complexity, as they can affect both files. When troubleshooting, use `docker compose config` to verify the final values. Additionally, be aware that CI/CD pipelines might behave differently than local development if they're not explicitly configured to handle override files.
 
 ### Practices for Simulating ECS Locally
 
