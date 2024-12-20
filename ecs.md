@@ -1046,9 +1046,11 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Purpose**: Serves as your private container registry, storing and managing Docker images that your ECS tasks will use. This resource is fundamental to your container infrastructure as it provides a secure, scalable way to distribute your application images.
 
 **Required**:
+
 - **Name**: Forms your repository's unique identifier and becomes part of your image URI. The name you choose affects how you'll reference images in task definitions and CI/CD pipelines. Consider a hierarchical naming scheme like `${org}-${app}-${component}` (e.g., `acme-web-api`) for clarity and organization.
 
 **Optional**:
+
 - **Image Tag Mutability**: A critical security and deployment control:
   - `MUTABLE`: Enables overwriting tags, simplifying development but risking deployment inconsistency.
   - `IMMUTABLE`: Prevents tag overwriting, ensuring deployment reliability and audit compliance.
@@ -1056,6 +1058,7 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Lifecycle Policies**: Manages repository growth and cost through automated cleanup rules. Consider retention requirements for rollbacks and compliance when configuring.
 
 **Resource Relationships**:
+
 - ECS task definitions depend on this for image references
 - CI/CD pipelines need push access through IAM roles
 - VPC endpoints may be required for private image pulls
@@ -1069,9 +1072,11 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Purpose**: Functions as your container orchestration platform's control plane, managing the placement, scheduling, and operation of your containers. This is the foundation upon which all your containerized applications will run.
 
 **Required**:
+
 - **Name**: Identifies your cluster uniquely within your AWS account. Choose a name that reflects its environment and purpose, such as `${org}-${env}-cluster` (e.g., `acme-prod-cluster`), as this name appears in logs and metrics.
 
 **Optional**:
+
 - **Capacity Providers**: Determines the underlying compute platform:
   - `FARGATE`: Offers serverless operation with per-second billing, ideal for variable workloads.
   - `EC2`: Provides more control and potential cost savings for predictable workloads.
@@ -1079,6 +1084,7 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Execute Command**: Enables interactive debugging capabilities, crucial for troubleshooting but requires careful security consideration.
 
 **Resource Relationships**:
+
 - Services and tasks run within the cluster context
 - Capacity providers affect networking and scaling behavior
 - CloudWatch receives metrics and logs from the cluster
@@ -1088,11 +1094,13 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Purpose**: Manages the deployment and maintenance of your containerized applications, ensuring the desired number of tasks remain healthy and available. This resource handles the operational aspects of your containers.
 
 **Required**:
+
 - **Cluster**: References the ECS cluster where this service will run. The choice of cluster affects resource availability and networking options.
 - **Task Definition**: Specifies the container configuration to deploy. This is your application's blueprint.
 - **Desired Count**: Determines how many copies of your task should run simultaneously. Consider high availability needs and cost implications.
 
 **Optional**:
+
 - **Load Balancer**: Enables traffic distribution across tasks. Essential for web applications:
   - Impacts how your application receives traffic
   - Affects service discovery options
@@ -1107,6 +1115,7 @@ This section provides a comprehensive list of Terraform resources used in the in
   - Circuit breaker settings
 
 **Resource Relationships**:
+
 - Depends on ECS cluster and task definitions
 - Integrates with load balancers and target groups
 - Uses IAM roles for task execution
@@ -1117,6 +1126,7 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Purpose**: Defines the complete specification for running your containers, including resource requirements, networking, storage, and security settings. This is your application's contract with ECS.
 
 **Required**:
+
 - **Container Definitions**: The core specification of your application:
   - Image: References your ECR repository
   - CPU/Memory: Resource allocations
@@ -1127,9 +1137,10 @@ This section provides a comprehensive list of Terraform resources used in the in
   - Pull container images
   - Send logs to CloudWatch
   - Access secrets
-  Without proper permissions, tasks cannot start
+    Without proper permissions, tasks cannot start
 
 **Optional**:
+
 - **Task Role**: Grants containers permission to access AWS services:
   - Consider least privilege principles
   - Separate roles for different services
@@ -1147,6 +1158,7 @@ This section provides a comprehensive list of Terraform resources used in the in
   - Affects security posture and maintenance
 
 **Resource Relationships**:
+
 - References ECR repositories for images
 - Uses IAM roles for permissions
 - Integrates with EFS for storage
@@ -1161,9 +1173,11 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Purpose**: Provides scalable, persistent storage that can be shared across multiple ECS tasks and availability zones. Essential for applications requiring shared state or persistent data.
 
 **Required**:
+
 - **Creation Token**: Ensures idempotent filesystem creation. Use a meaningful identifier that reflects the filesystem's purpose.
 
 **Optional**:
+
 - **Encrypted**: Controls data-at-rest encryption:
   - Should generally be enabled for production
   - Can use custom KMS keys
@@ -1177,6 +1191,7 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Lifecycle Policy**: Manages cost for infrequently accessed data
 
 **Resource Relationships**:
+
 - Mount targets connect to VPC subnets
 - Security groups control access
 - Access points provide application-specific entry points
@@ -1186,6 +1201,7 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Purpose**: Creates application-specific entry points to your EFS filesystem, enforcing file system isolation and access control between different applications sharing the same filesystem.
 
 **Optional**:
+
 - **Root Directory**: Controls filesystem visibility:
   - Path to expose to applications
   - Creation settings for new directories
@@ -1195,6 +1211,7 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Tags**: Organize and track access points
 
 **Resource Relationships**:
+
 - Connects to EFS filesystem
 - Referenced in ECS task definitions
 - May require security group rules
@@ -1204,11 +1221,13 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Purpose**: Creates network interfaces that allow ECS tasks to connect to your EFS filesystem from within their VPC subnets. Without mount targets, your filesystem is inaccessible.
 
 **Required**:
+
 - **File System ID**: Links to your EFS filesystem. Each filesystem needs at least one mount target to be useful.
 - **Subnet ID**: Places the mount target in your VPC. Deploy in each AZ where your tasks might run.
 - **Security Groups**: Control network access to the filesystem.
 
 **Resource Relationships**:
+
 - Depends on EFS filesystem
 - Requires VPC subnet placement
 - Security groups must allow NFS traffic
@@ -1222,9 +1241,11 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Purpose**: Centralizes log collection and retention for your ECS tasks, enabling monitoring, troubleshooting, and compliance needs. This is your primary window into application behavior.
 
 **Required**:
+
 - **Name**: Creates the logical container for your logs. Use a structured naming scheme like `/ecs/${app-name}/${environment}` for easy identification and management.
 
 **Optional**:
+
 - **Retention in Days**: Controls log lifetime:
   - Balance storage costs with compliance needs
   - Common values: 30, 60, 90 days
@@ -1234,6 +1255,7 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Metric Filters**: Creates metrics from log patterns
 
 **Resource Relationships**:
+
 - ECS tasks send logs here
 - IAM roles need log writing permissions
 - May integrate with external log aggregation
@@ -1247,6 +1269,7 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Purpose**: Distributes incoming application traffic across your ECS tasks, providing a single entry point while enabling high availability and scalability. Essential for web applications.
 
 **Required**:
+
 - **Name**: Identifies your load balancer. Choose a name that reflects its role and environment.
 - **Subnets**: Places the ALB in your VPC:
   - Public subnets for internet-facing applications
@@ -1254,6 +1277,7 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Security Groups**: Control traffic access
 
 **Optional**:
+
 - **Internal**: Determines visibility:
   - `true` for internal services
   - `false` for internet-facing applications
@@ -1264,6 +1288,7 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Deletion Protection**: Prevents accidental removal
 
 **Resource Relationships**:
+
 - Target groups define backend services
 - Listeners configure traffic handling
 - Security groups control access
@@ -1274,6 +1299,7 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Purpose**: Defines how the load balancer checks health and routes traffic to your ECS tasks. This resource bridges the gap between your load balancer and containers.
 
 **Required**:
+
 - **Target Type**: Must be 'ip' for Fargate tasks
 - **VPC ID**: Places the target group in your VPC
 - **Protocol/Port**: Defines how traffic reaches containers
@@ -1283,6 +1309,7 @@ This section provides a comprehensive list of Terraform resources used in the in
   - Check frequency
 
 **Optional**:
+
 - **Stickiness**: Maintains user sessions:
   - Cookie-based persistence
   - Duration settings
@@ -1292,6 +1319,7 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Load Balancing Algorithm**: Traffic distribution method
 
 **Resource Relationships**:
+
 - Referenced by ECS services
 - Used by ALB listeners
 - May require security group rules
@@ -1301,6 +1329,7 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Purpose**: Configures how your load balancer accepts and processes incoming traffic, defining the entry points for your application.
 
 **Required**:
+
 - **Load Balancer ARN**: Links to your ALB
 - **Port**: Defines the listening port:
   - 80 for HTTP
@@ -1314,6 +1343,7 @@ This section provides a comprehensive list of Terraform resources used in the in
   - Redirect
 
 **Optional**:
+
 - **SSL Certificate**: Required for HTTPS:
   - ACM certificate reference
   - Multiple certificates possible
@@ -1326,6 +1356,7 @@ This section provides a comprehensive list of Terraform resources used in the in
   - Query string conditions
 
 **Resource Relationships**:
+
 - Belongs to a load balancer
 - References target groups
 - May use ACM certificates
@@ -1340,6 +1371,7 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Purpose**: Defines permissions that AWS services (like ECS) can assume to interact with other AWS resources. Critical for security and access control.
 
 **Required**:
+
 - **Name**: Uniquely identifies the role:
   - Use descriptive names like `ecs-task-execution-role`
   - Include purpose and environment
@@ -1348,6 +1380,7 @@ This section provides a comprehensive list of Terraform resources used in the in
   - Typically allows ECS service
 
 **Optional**:
+
 - **Description**: Documents the role's purpose
 - **Path**: Organizes roles hierarchically
 - **Force Detach Policies**: Handles cleanup
@@ -1355,6 +1388,7 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Permissions Boundary**: Limits maximum permissions
 
 **Resource Relationships**:
+
 - Used by ECS tasks and services
 - Attached to task definitions
 - Referenced in service configurations
@@ -1364,6 +1398,7 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Purpose**: Defines custom permissions for your IAM roles when AWS managed policies don't provide the exact permissions needed.
 
 **Required**:
+
 - **Role**: References the IAM role
 - **Policy**: JSON document defining:
   - Allowed actions
@@ -1371,11 +1406,13 @@ This section provides a comprehensive list of Terraform resources used in the in
   - Conditions for access
 
 **Optional**:
+
 - **Name**: Identifies the policy
 - **Name Prefix**: Generates unique names
 - **Description**: Documents purpose
 
 **Resource Relationships**:
+
 - Attached to IAM roles
 - Defines service permissions
 - May reference various AWS resources
@@ -1385,6 +1422,7 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Purpose**: Attaches AWS managed policies to your roles, providing standardized permissions sets that AWS maintains.
 
 **Required**:
+
 - **Role**: The receiving role
 - **Policy ARN**: The managed policy to attach:
   - AWSECSTaskExecutionRolePolicy
@@ -1392,6 +1430,7 @@ This section provides a comprehensive list of Terraform resources used in the in
   - Custom policy ARNs
 
 **Resource Relationships**:
+
 - Connects roles to policies
 - Referenced by ECS services
 - Part of task execution roles
@@ -1405,16 +1444,19 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Purpose**: Controls inbound and outbound network traffic for your AWS resources, acting as a virtual firewall at the instance level. Critical for securing your ECS infrastructure.
 
 **Required**:
+
 - **VPC ID**: Places the security group in your VPC. This association cannot be changed after creation, so choose carefully based on your network architecture.
 - **Name**: Identifies the group uniquely within your VPC. Consider a naming convention like `${component}-${env}-sg` (e.g., `ecs-tasks-prod-sg`) for clear identification.
 
 **Optional**:
+
 - **Description**: Documents the group's purpose and rules. crucial for team understanding and compliance.
 - **Tags**: Enable resource organization and cost tracking.
 - **Ingress Rules**: Define allowed inbound traffic (though better managed through separate rules).
 - **Egress Rules**: Specify allowed outbound traffic (though better managed through separate rules).
 
 **Resource Relationships**:
+
 - Used by ECS tasks, ALBs, and EFS mount targets
 - Referenced in service definitions
 - Interacts with other security groups through rules
@@ -1425,6 +1467,7 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Purpose**: Defines specific inbound or outbound traffic rules for security groups. Separating rules from group definitions improves maintainability and reduces conflicts in team environments.
 
 **Required**:
+
 - **Type**: Specifies `ingress` (inbound) or `egress` (outbound). This fundamentally defines the rule's purpose.
 - **Security Group ID**: Links to the security group this rule modifies.
 - **Protocol**: Specifies allowed protocols (e.g., tcp, udp, icmp).
@@ -1432,11 +1475,13 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Source/Destination**: Determines allowed traffic sources/destinations through CIDR blocks or security group IDs.
 
 **Optional**:
+
 - **Description**: Documents the rule's specific purpose.
 - **Self**: Allows references to the security group itself.
 - **Prefix List IDs**: References AWS-managed prefix lists.
 
 **Resource Relationships**:
+
 - Belongs to specific security groups
 - May reference other security groups
 - Impacts network accessibility of resources
@@ -1451,10 +1496,12 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Purpose**: Enables private communication between your VPC and AWS services without traversing the public internet. Essential for secure and reliable service access in private subnets.
 
 **Required**:
+
 - **VPC ID**: Associates the endpoint with your VPC. This defines the network context for private access.
 - **Service Name**: Specifies which AWS service to connect to (e.g., `com.amazonaws.region.ecr.api`). The choice depends on which AWS services your applications need to access privately.
 
 **Optional**:
+
 - **VPC Endpoint Type**: Determines the endpoint's behavior:
   - `Interface`: Creates an ENI with a private IP
   - `Gateway`: Uses route tables for S3 and DynamoDB
@@ -1464,6 +1511,7 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Policy**: Restricts what actions can be performed through the endpoint.
 
 **Resource Relationships**:
+
 - Integrates with VPC networking
 - Supports ECS service communication
 - May require security group configurations
@@ -1478,9 +1526,11 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Purpose**: Manages SSL/TLS certificates for securing application traffic. Essential for any public-facing applications requiring HTTPS.
 
 **Required**:
+
 - **Domain Name**: Specifies the domain to secure (e.g., `*.example.com`). Must match your application's domain name requirements.
 
 **Optional**:
+
 - **Validation Method**: Controls how certificate ownership is verified:
   - `DNS`: Automated validation through Route 53 or manual DNS records
   - `EMAIL`: Traditional email-based validation
@@ -1488,6 +1538,7 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Tags**: Organizes and tracks certificates
 
 **Resource Relationships**:
+
 - Used by ALB listeners for HTTPS
 - May integrate with Route 53 for DNS validation
 - Referenced in listener configurations
@@ -1502,6 +1553,7 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Purpose**: Stores configuration values and non-sensitive secrets. Ideal for environment-specific settings and application configuration.
 
 **Required**:
+
 - **Name**: Creates a unique identifier, typically using hierarchical paths like `/app/${env}/${component}/${param}`.
 - **Type**: Defines the parameter type:
   - `String`: Basic text values
@@ -1510,6 +1562,7 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Value**: The actual parameter value to store.
 
 **Optional**:
+
 - **Description**: Documents the parameter's purpose and usage.
 - **KMS Key ID**: For custom encryption of SecureString parameters.
 - **Tier**: Determines parameter capabilities and cost:
@@ -1518,6 +1571,7 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Tags**: Enables organization and tracking.
 
 **Resource Relationships**:
+
 - Referenced in ECS task definitions
 - Used for application configuration
 - May require IAM permissions for access
@@ -1528,9 +1582,11 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Purpose**: Manages sensitive information like credentials, API keys, and other secrets. Provides additional features beyond SSM Parameter Store.
 
 **Required**:
+
 - **Name**: Uniquely identifies the secret. Use a descriptive naming scheme like `${app}/${env}/${purpose}`.
 
 **Optional**:
+
 - **Description**: Documents the secret's purpose and contents.
 - **KMS Key ID**: Specifies a custom encryption key.
 - **Policy**: Controls access through IAM policies.
@@ -1541,6 +1597,7 @@ This section provides a comprehensive list of Terraform resources used in the in
   - Rotation rules
 
 **Resource Relationships**:
+
 - Referenced in task definitions
 - May use KMS for encryption
 - Requires IAM permissions for access
@@ -1551,10 +1608,12 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Purpose**: Manages different versions of secrets, enabling secret rotation and providing rollback capabilities.
 
 **Required**:
+
 - **Secret ID**: References the parent secret this version belongs to.
 - **Secret String**: Contains the sensitive value to store.
 
 **Optional**:
+
 - **Version Stages**: Labels versions for different purposes:
   - `AWSCURRENT`: Active version
   - `AWSPENDING`: Next version
@@ -1562,6 +1621,7 @@ This section provides a comprehensive list of Terraform resources used in the in
 - **Version ID**: Automatically generated unique identifier.
 
 **Resource Relationships**:
+
 - Belongs to a Secrets Manager secret
 - Referenced in applications
 - Part of secret rotation workflow
