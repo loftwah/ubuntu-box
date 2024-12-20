@@ -46,23 +46,15 @@ fi
 
 echo "🔍 Retrieving: $NOTE_TITLE"
 
-# Get the raw content and parse it properly
-content=$(op item get "$NOTE_TITLE" --vault "$VAULT_NAME" --fields env,notesPlain --format=json)
-if [[ -z "$content" ]]; then
-    echo "❌ Failed to retrieve content"
+# Get all fields except internal ones
+if ! op item get "$NOTE_TITLE" --vault "$VAULT_NAME" --format=json | \
+     jq -r '.fields[] | select(.id | test("^[^notesPlain]")) | "\(.label)=\(.value)"' | sort > "$OUTPUT_FILE"; then
+    echo "❌ Failed to retrieve"
     exit 1
 fi
 
-# Get JSON from either field and convert to env format
-echo "$content" | jq -r '.[0].value' | jq -r 'to_entries | .[] | "\(.key)=\(.value)"' | sort > "$OUTPUT_FILE"
-
-if [[ -s "$OUTPUT_FILE" ]]; then
-    echo "✅ Retrieved to: $OUTPUT_FILE"
-    echo "📄 Content:"
-    echo "-------------------"
-    cat "$OUTPUT_FILE"
-    echo "-------------------"
-else
-    echo "❌ Failed to convert JSON to env"
-    exit 1
-fi
+echo "✅ Retrieved to: $OUTPUT_FILE"
+echo "📄 Content:"
+echo "-------------------"
+cat "$OUTPUT_FILE"
+echo "-------------------"

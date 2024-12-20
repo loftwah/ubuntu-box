@@ -8,28 +8,6 @@ check_op_auth() {
     fi
 }
 
-env_to_json() {
-    local env_file="$1"
-    local json_content="{}"
-    
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        # Skip empty lines and comments
-        if [[ -z "$line" ]] || [[ "$line" =~ ^[[:space:]]*# ]]; then
-            continue
-        fi
-        
-        # Split on first = only and trim whitespace
-        local key="${line%%=*}"
-        local value="${line#*=}"
-        key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-        value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-        
-        json_content=$(echo "$json_content" | jq --arg k "$key" --arg v "$value" '. + {($k): $v}')
-    done < "$env_file"
-    
-    echo "$json_content"
-}
-
 VAULT_NAME="Personal"
 ENV_FILE=".env"
 PROJECT_NAME=$(basename "$(pwd)")
@@ -59,14 +37,23 @@ timestamp=$(date +%Y%m%d_%H%M%S)
 note_title="env.${PROJECT_NAME}.${ENV_TYPE}.${timestamp}"
 
 echo "📝 Creating note: $note_title"
-ENV_JSON=$(env_to_json "$ENV_FILE")
-echo "📄 JSON content:"
-echo "$ENV_JSON" | jq .
 
-# Store in both fields for maximum compatibility
-if op item create --category "Secure Note" --title "$note_title" --vault "$VAULT_NAME" \
-   --tags "env,${PROJECT_NAME},${ENV_TYPE}" \
-   "env[text]=$ENV_JSON" "notesPlain=$ENV_JSON"; then
+# Build the field arguments for op
+FIELD_ARGS=""
+while IFS='=' read -r key value || [[ -n "$key" ]]; do
+    # Skip empty lines and comments
+    [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
+    
+    # Trim whitespace
+    key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    
+    FIELD_ARGS="$FIELD_ARGS \"$key[text]=$value\""
+done < "$ENV_FILE"
+
+# Create the item with fields
+if eval "op item create --category \"Secure Note\" --title \"$note_title\" --vault \"$VAULT_NAME\" \
+   --tags \"env,${PROJECT_NAME},${ENV_TYPE}\" $FIELD_ARGS"; then
     echo "✅ Stored as: $note_title"
     echo "$note_title" > /tmp/last_stored_note
 else
