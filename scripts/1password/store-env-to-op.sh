@@ -8,6 +8,22 @@ check_op_auth() {
     fi
 }
 
+env_to_json() {
+    local env_file="$1"
+    local json_content="{}"
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ -z "$line" ]] || [[ "$line" =~ ^[[:space:]]*# ]]; then
+            continue
+        fi
+        local key="${line%%=*}"
+        local value="${line#*=}"
+        key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        json_content=$(echo "$json_content" | jq --arg k "$key" --arg v "$value" '. + {($k): $v}')
+    done < "$env_file"
+    echo "$json_content" | jq '.'
+}
+
 VAULT_NAME="Personal"
 ENV_FILE=".env"
 PROJECT_NAME=$(basename "$(pwd)")
@@ -19,9 +35,9 @@ while getopts "f:v:p:t:h" opt; do
         v) VAULT_NAME="$OPTARG" ;;
         p) PROJECT_NAME="$OPTARG" ;;
         t) ENV_TYPE="$OPTARG" ;;
-        h) 
+        h)
            echo "Usage: $0 [-f env_file] [-v vault] [-p project] [-t type]"
-           exit 0 
+           exit 0
            ;;
     esac
 done
@@ -33,29 +49,19 @@ if [[ ! -f "$ENV_FILE" ]]; then
     exit 1
 fi
 
-timestamp=$(date +%Y%m%d_%H%M%S)
-note_title="env.${PROJECT_NAME}.${ENV_TYPE}.${timestamp}"
+note_title="env.${PROJECT_NAME}.${ENV_TYPE}"
+existing_ids=$(op item list --vault "$VAULT_NAME" --format=json | \
+              jq -r --arg title "$note_title" '.[] | select(.title == $title) | .id')
+if [[ -n "$existing_ids" ]]; then
+    while read -r id; do
+        op item delete "$id" --vault "$VAULT_NAME"
+    done <<< "$existing_ids"
+fi
 
-echo "📝 Creating note: $note_title"
-
-# Build the field arguments for op
-FIELD_ARGS=""
-while IFS='=' read -r key value || [[ -n "$key" ]]; do
-    # Skip empty lines and comments
-    [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
-    
-    # Trim whitespace
-    key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-    value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-    
-    FIELD_ARGS="$FIELD_ARGS \"$key[text]=$value\""
-done < "$ENV_FILE"
-
-# Create the item with fields
-if eval "op item create --category \"Secure Note\" --title \"$note_title\" --vault \"$VAULT_NAME\" \
-   --tags \"env,${PROJECT_NAME},${ENV_TYPE}\" $FIELD_ARGS"; then
+ENV_JSON=$(env_to_json "$ENV_FILE")
+if op item create --category "Secure Note" --title "$note_title" --vault "$VAULT_NAME" \
+   --tags "env,${PROJECT_NAME},${ENV_TYPE}" "notesPlain=$ENV_JSON"; then
     echo "✅ Stored as: $note_title"
-    echo "$note_title" > /tmp/last_stored_note
 else
     echo "❌ Failed to store"
     exit 1

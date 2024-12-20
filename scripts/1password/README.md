@@ -1,117 +1,125 @@
 # 1Password Environment Management Scripts
 
-Scripts to store environment variables in 1Password, with each variable as a separate field for easy access.
+Scripts to store and manage environment variables in 1Password, compatible with both bash scripts and Ruby applications.
+
+## Prerequisites
+
+- Install the [1Password CLI](https://developer.1password.com/docs/cli/get-started/) (`op`).
+- Ensure `jq` is installed: `sudo apt install jq` (Linux) or `brew install jq` (Mac).
 
 ## Quick Start
 
-### Store your .env file
+### 1. Store your .env file
 
 ```bash
 ./store-env-to-op.sh -f .env -p myproject
 ```
 
-This creates a secure note where each line in your .env becomes a field in 1Password:
+This creates a secure note in 1Password with title `env.myproject.development` containing all your env vars as JSON:
 
+```json
+{
+  "DATABASE_URL": "postgres://localhost:5432",
+  "REDIS_URL": "redis://localhost:6379",
+  "API_KEY": "secret123"
+}
 ```
-HELLO=WORLD    ->  Field "HELLO" with value "WORLD"
-GDAY=MATE      ->  Field "GDAY" with value "MATE"
-```
 
-### Retrieve environment variables
-
-Get all variables (complete .env):
+### 2. Retrieve your .env file
 
 ```bash
-./retrieve-env-from-op.sh -t env.myproject.development.20241220_123456 -o .env
+./retrieve-env-from-op.sh -p myproject -o .env
+# or
+./retrieve-env-from-op.sh -t env.myproject.development -o .env
 ```
 
-Get a single variable:
-
-```bash
-# Get just the DATABASE_URL
-op item get env.myproject.development.20241220_123456 --fields DATABASE_URL
-```
-
-### List available environments
-
-```bash
-./retrieve-env-from-op.sh -l -p myproject
-```
-
-### Verify everything worked
+### 3. Verify everything works
 
 ```bash
 ./verify-store-and-retrieve.sh -f .env -p myproject
 ```
 
-## Why This Approach?
+## Using with Ruby
 
-- Each environment variable is a separate field in 1Password
-- Easy to retrieve single values when needed (e.g., just the API key)
-- Works great with 1Password CLI filtering and field selection
-- Simple to integrate with other tools and scripts
+The stored secrets are compatible with Ruby applications. Example usage:
+
+```ruby
+class DevelopmentSecrets
+  def self.setup
+    return unless Rails.env.development?
+
+    system('op signin')
+    load_secrets
+  end
+
+  private
+
+  def self.load_secrets
+    # Get the entire JSON object from the note
+    json_content = fetch_secret('env.myproject.development', 'notesPlain')
+    secrets = JSON.parse(json_content)
+
+    # Load all the keys into ENV
+    secrets.each { |key, value| ENV[key.to_s.upcase] = value }
+  end
+
+  def self.fetch_secret(item, field)
+    `op item get "#{item}" --field "#{field}"`.strip
+  end
+end
+```
 
 ## Script Reference
 
 ### store-env-to-op.sh
 
-Stores each line in your .env as a separate field in a 1Password secure note.
-
 ```bash
 ./store-env-to-op.sh -f .env -p myproject [-t development] [-v "Personal"]
 ```
 
+- Creates a secure note with name `env.myproject.development`.
+- Stores all env vars as JSON in the note's `notesPlain` field.
+- Adds tags for easy filtering.
+
 ### retrieve-env-from-op.sh
 
-Get all fields as .env or use 1Password CLI for single fields.
-
 ```bash
-# Get all fields as .env
-./retrieve-env-from-op.sh -t <name> -o .env
+# List available environments
+./retrieve-env-from-op.sh -l -p myproject
 
-# Or use op cli directly for single fields
-op item get <name> --fields DATABASE_URL
+# Retrieve specific environment
+./retrieve-env-from-op.sh -t env.myproject.development -o .env
 ```
 
 ### verify-store-and-retrieve.sh
-
-Verifies that storage and retrieval work correctly.
 
 ```bash
 ./verify-store-and-retrieve.sh -f .env -p myproject
 ```
 
+Verifies that storage and retrieval work correctly.
+
 ## Common Examples
 
-### Get a specific value
+### Multiple Environments
 
 ```bash
-# Get just the API key
-op item get env.myproject.development.20241220_123456 --fields API_KEY
-```
-
-### Store multiple environments
-
-```bash
-# Store each environment
+# Store different environments
 ./store-env-to-op.sh -f .env.development -p myproject -t development
 ./store-env-to-op.sh -f .env.production -p myproject -t production
 
-# List them
+# List all environments
 ./retrieve-env-from-op.sh -l -p myproject
 
-# Get a specific field from production
-op item get env.myproject.production.20241220_123456 --fields DATABASE_URL
+# Get specific environment
+./retrieve-env-from-op.sh -t env.myproject.production -o .env.production
 ```
 
-### Working with teams
+### Team Vaults
 
 ```bash
-# Store in team vault
-./store-env-to-op.sh -f .env -p "team-project" -v "Team Vault"
-
-# Get production database URL from team vault
-op item get env.team-project.production.20241220_123456 --fields DATABASE_URL --vault "Team Vault"
+./store-env-to-op.sh -f .env -p myproject -v "Team Vault"
+./retrieve-env-from-op.sh -t env.myproject.development -v "Team Vault" -o .env
 ```
 
 ## Troubleshooting
@@ -122,7 +130,7 @@ op item get env.team-project.production.20241220_123456 --fields DATABASE_URL --
 eval $(op signin)
 ```
 
-### Can't find environment
+### Can't Find Environment
 
 ```bash
 # List all environments
@@ -132,16 +140,21 @@ eval $(op signin)
 ./retrieve-env-from-op.sh -l -p myproject
 ```
 
-### Check field names
+### View Raw JSON
 
 ```bash
-# See all fields in an environment
-op item get env.myproject.development.20241220_123456 --format=json | jq '.fields[] | .label'
+op item get env.myproject.development --field notesPlain
 ```
+
+### Error Codes
+
+- `❌ Note not found`: The title or project name doesn’t exist in the specified vault.
+- `❌ Failed to retrieve notesPlain content`: The field might be missing or corrupted.
 
 ## Important Notes
 
-- Each line in .env becomes a field in 1Password
-- Use `op item get --fields FIELD_NAME` for single values
-- Use the scripts for full .env management
-- Keep field names simple (no spaces or special characters)
+- Each `.env` file is stored as a single secure note with JSON content.
+- Note names follow pattern: `env.{project}.{environment}`.
+- Same data accessible from both bash scripts and Ruby.
+- All env vars stored in the `notesPlain` field as JSON.
+- Use `op item get` to access individual fields if needed.
