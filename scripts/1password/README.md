@@ -9,6 +9,8 @@ Scripts to store and manage environment variables in 1Password, compatible with 
 
 ## Quick Start
 
+> **Note**: `alias op-signin='eval $(op signin)'`
+
 ### 1. Store your .env file
 
 ```bash
