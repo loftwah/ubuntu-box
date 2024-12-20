@@ -1,183 +1,104 @@
 #!/bin/bash
-# verify-store-and-retrieve.sh - Verify 1Password ENV storage and retrieval
+# verify-store-and-retrieve.sh - Verify 1Password ENV storage/retrieval
 
-# Utility functions
-check_op_auth() {
-    echo "🔐 Checking 1Password authentication..."
-    if ! op account list; then
-        echo "❌ Error: Not signed in to 1Password CLI. Please sign in first using 'eval \$(op signin)'."
-        exit 1
-    fi
-    echo "✅ Authentication verified"
+check_dependencies() {
+    for script in store-env-to-op.sh retrieve-env-from-op.sh; do
+        if [[ ! -f "$script" ]]; then
+            echo "❌ Missing $script"
+            exit 1
+        fi
+        chmod +x "$script"
+    done
 }
 
-select_vault() {
-    local default_vault="$1"
-    
-    echo "📚 Available vaults:"
-    op vault list
-    
-    read -p "Select vault (press Enter for default '$default_vault'): " selected_vault
-    echo ${selected_vault:-$default_vault}
-}
-
-validate_env_file() {
-    local env_file="$1"
-    echo "📋 Validating .env file: $env_file"
-    if [[ ! -f "$env_file" ]]; then
-        echo "❌ Error: $env_file does not exist."
-        return 1
-    fi
-    echo "✅ File exists"
-    echo "📄 File contents:"
-    echo "-------------------"
-    cat "$env_file"
-    echo "-------------------"
-    return 0
-}
-
-compare_env_files() {
+compare_files() {
     local original="$1"
     local retrieved="$2"
     
-    echo "🔍 Comparing files..."
-    echo "📄 Original: $original"
-    echo "📄 Retrieved: $retrieved"
-    
-    # Create temporary files with sorted, normalized content
+    # Create temp files with normalized content
     local temp_orig=$(mktemp)
     local temp_retr=$(mktemp)
     
-    echo "🔄 Processing files for comparison..."
-    
-    # Process files: remove comments, sort, and normalize whitespace
+    # Normalize and sort both files
     grep -v '^#' "$original" | sort | sed 's/[[:space:]]*=[[:space:]]*/=/' > "$temp_orig"
     grep -v '^#' "$retrieved" | sort | sed 's/[[:space:]]*=[[:space:]]*/=/' > "$temp_retr"
     
-    # Compare and show differences
-    if diff -u "$temp_orig" "$temp_retr" > /dev/null; then
-        echo "✅ Verification successful: Original and retrieved files match"
-        local result=0
-    else
-        echo "❌ Verification failed: Files differ"
-        echo "Differences found:"
-        echo "-------------------"
-        diff -u "$temp_orig" "$temp_retr" | grep -E '^\+|\-' | grep -v '^\+\+\+|\-\-\-'
-        echo "-------------------"
-        local result=1
-    fi
+    echo "📄 Original content (normalized):"
+    cat "$temp_orig"
+    echo "📄 Retrieved content (normalized):"
+    cat "$temp_retr"
     
-    # Cleanup
-    rm "$temp_orig" "$temp_retr"
-    return $result
+    if diff "$temp_orig" "$temp_retr" >/dev/null; then
+        echo "✅ Files match perfectly"
+        rm "$temp_orig" "$temp_retr"
+        return 0
+    else
+        echo "❌ Files differ:"
+        diff "$temp_orig" "$temp_retr"
+        rm "$temp_orig" "$temp_retr"
+        return 1
+    fi
 }
 
-# Main script
 VAULT_NAME="Personal"
 ENV_FILE=".env"
-PREFIX="env"
-PROJECT_NAME=""
+PROJECT_NAME=$(basename "$(pwd)")
 ENV_TYPE="development"
-TEMP_RETRIEVE_FILE=$(mktemp)
 
-show_help() {
-    echo "Usage: $0 [-f ENV_FILE] [-v VAULT_NAME] [-p PROJECT_NAME] [-t ENV_TYPE] [-x PREFIX]"
-    echo
-    echo "Options:"
-    echo " -f ENV_FILE      Specify the .env file to verify (default: .env)"
-    echo " -v VAULT_NAME    Specify the 1Password vault (default: Personal)"
-    echo " -p PROJECT_NAME  Project name for organization (default: current directory name)"
-    echo " -t ENV_TYPE     Environment type (default: development)"
-    echo " -x PREFIX       Custom prefix for the 1Password item (default: env)"
-    echo " -i             Interactive mode - select vault from list"
-    echo " -k             Keep temporary files for inspection"
-    echo " -h             Show this help message"
-    exit 0
-}
-
-cleanup() {
-    if [[ "$KEEP_TEMPS" != "true" ]]; then
-        echo "🧹 Cleaning up temporary files..."
-        rm -f "$TEMP_RETRIEVE_FILE"
-    else
-        echo "🔍 Temporary files kept for inspection:"
-        echo "Retrieved file: $TEMP_RETRIEVE_FILE"
-    fi
-}
-trap cleanup EXIT
-
-while getopts "f:v:p:t:x:ikh" opt; do
+while getopts "f:v:p:t:h" opt; do
     case ${opt} in
         f) ENV_FILE="$OPTARG" ;;
         v) VAULT_NAME="$OPTARG" ;;
         p) PROJECT_NAME="$OPTARG" ;;
         t) ENV_TYPE="$OPTARG" ;;
-        x) PREFIX="$OPTARG" ;;
-        i) VAULT_NAME=$(select_vault "$VAULT_NAME") ;;
-        k) KEEP_TEMPS="true" ;;
-        h) show_help ;;
-        *) show_help ;;
+        h)
+           echo "Usage: $0 [-f env_file] [-v vault] [-p project] [-t type]"
+           exit 0
+           ;;
     esac
 done
 
-check_op_auth
-validate_env_file "$ENV_FILE" || exit 1
+check_dependencies
 
-# If no project name specified, use current directory name
-if [[ -z "$PROJECT_NAME" ]]; then
-    PROJECT_NAME=$(basename "$(pwd)")
+if [[ ! -f "$ENV_FILE" ]]; then
+    echo "❌ Error: $ENV_FILE not found"
+    exit 1
 fi
 
-# Validate environment type
-case "$ENV_TYPE" in
-    development|staging|production|testing) ;;
-    *)
-        echo "❌ Error: Invalid environment type. Must be one of: development, staging, production, testing"
-        exit 1
-        ;;
-esac
-
-echo "🔄 Starting verification process..."
+echo "🔄 Starting verification..."
 echo "📂 Project: $PROJECT_NAME"
-echo "🌍 Environment: $ENV_TYPE"
 echo "🔐 Vault: $VAULT_NAME"
-echo "📄 ENV File: $ENV_FILE"
+echo "📄 File: $ENV_FILE"
 
-# Step 1: Store the environment file
-echo "📤 Storing environment file..."
-timestamp=$(date +%Y%m%d_%H%M%S)
-note_title="${PREFIX}.${PROJECT_NAME}.${ENV_TYPE}.${timestamp}"
-
-echo "📝 Creating secure note with title: $note_title"
-
-# Create the secure note with the env file content
-if ! op item create --category "Secure Note" --title "$note_title" --vault "$VAULT_NAME" \
-    --tags "env,secrets,${PROJECT_NAME},${ENV_TYPE}" "content[text]=$(cat "$ENV_FILE")"; then
-    echo "❌ Failed to store environment file"
+# Store the env file
+if ! ./store-env-to-op.sh -f "$ENV_FILE" -p "$PROJECT_NAME" -t "$ENV_TYPE" -v "$VAULT_NAME"; then
+    echo "❌ Store failed"
     exit 1
 fi
 
-echo "✅ Stored as: $note_title"
+# Get the title of the note we just stored
+if [[ ! -f /tmp/last_stored_note ]]; then
+    echo "❌ Couldn't find stored note title"
+    exit 1
+fi
+NOTE_TITLE=$(cat /tmp/last_stored_note)
+rm /tmp/last_stored_note
 
-# Step 2: Retrieve the environment file
-echo "📥 Retrieving environment file..."
-echo "🔍 Looking up item: $note_title"
-if ! op item get "$note_title" --vault "$VAULT_NAME" --fields content > "$TEMP_RETRIEVE_FILE"; then
-    echo "❌ Failed to retrieve environment file"
+# Retrieve to a temp file
+TEMP_FILE=$(mktemp)
+if ! ./retrieve-env-from-op.sh -t "$NOTE_TITLE" -o "$TEMP_FILE" -v "$VAULT_NAME"; then
+    echo "❌ Retrieve failed"
+    rm "$TEMP_FILE"
     exit 1
 fi
 
-echo "📄 Retrieved content:"
-echo "-------------------"
-cat "$TEMP_RETRIEVE_FILE"
-echo "-------------------"
-
-# Step 3: Compare files
-echo "🔍 Comparing original and retrieved files..."
-if compare_env_files "$ENV_FILE" "$TEMP_RETRIEVE_FILE"; then
-    echo "✅ Verification complete: All tests passed"
+# Compare the files
+if compare_files "$ENV_FILE" "$TEMP_FILE"; then
+    echo "✅ Verification successful!"
+    rm "$TEMP_FILE"
     exit 0
 else
     echo "❌ Verification failed"
+    rm "$TEMP_FILE"
     exit 1
 fi

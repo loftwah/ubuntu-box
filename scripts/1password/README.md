@@ -5,19 +5,15 @@ A set of scripts to securely store and manage environment variables using 1Passw
 ## Quick Start (The Basics)
 
 ### 1. Store your .env file
-
 ```bash
 ./store-env-to-op.sh -f .env -p myproject
 ```
 
 ### 2. List available environments (instead of remembering timestamps!)
-
 ```bash
 ./retrieve-env-from-op.sh -l -p myproject
 ```
-
 This will show you something like:
-
 ```
 Available environment files:
 env.myproject.development.20241220_123456
@@ -26,9 +22,7 @@ env.myproject.production.20241220_123458
 ```
 
 ### 3. Retrieve your .env file
-
 Copy the full name from the list above or just use the project name:
-
 ```bash
 # Using project name (will list available envs if multiple exist)
 ./retrieve-env-from-op.sh -p myproject -o .env
@@ -38,7 +32,6 @@ Copy the full name from the list above or just use the project name:
 ```
 
 ### 4. Verify everything worked
-
 ```bash
 ./verify-store-and-retrieve.sh -f .env -p myproject
 ```
@@ -46,7 +39,6 @@ Copy the full name from the list above or just use the project name:
 ## Common Use Cases
 
 ### "Help! I don't want to overwrite my existing .env!"
-
 ```bash
 # Backup your existing .env
 mv .env .env.backup
@@ -62,7 +54,6 @@ mv .env .env.backup
 ```
 
 ### "I have multiple environments (.env.development, .env.production, etc.)"
-
 ```bash
 # Store each environment
 ./store-env-to-op.sh -f .env.development -p myproject -t development
@@ -76,7 +67,6 @@ mv .env .env.backup
 ```
 
 ### "I don't remember what I named my project!"
-
 ```bash
 # List all environment files
 ./retrieve-env-from-op.sh -l
@@ -86,7 +76,6 @@ mv .env .env.backup
 ```
 
 ### "I want to make sure nothing got messed up"
-
 ```bash
 # Verify any environment file
 ./verify-store-and-retrieve.sh -f .env -p myproject
@@ -98,33 +87,27 @@ mv .env .env.backup
 ## Script Reference
 
 ### store-env-to-op.sh
-
 ```bash
 ./store-env-to-op.sh -f .env -p myproject [-t development]
 ```
-
 - `-f .env`: Which file to store (default: .env)
 - `-p myproject`: Project name
 - `-t development`: Environment type (default: development)
 - `-i`: Interactive mode (shows available vaults)
 
 ### retrieve-env-from-op.sh
-
 ```bash
 ./retrieve-env-from-op.sh -p myproject [-o .env]
 ```
-
 - `-p myproject`: Project name
 - `-o .env`: Output file (default: .env)
 - `-l`: List available environments
 - `-i`: Interactive mode
 
 ### verify-store-and-retrieve.sh
-
 ```bash
 ./verify-store-and-retrieve.sh -f .env -p myproject
 ```
-
 - `-f .env`: File to verify
 - `-p myproject`: Project name
 - `-k`: Keep temp files if something goes wrong
@@ -132,7 +115,6 @@ mv .env .env.backup
 ## Tips & Tricks
 
 ### Always backup first!
-
 ```bash
 # Quick backup
 cp .env .env.backup
@@ -142,7 +124,6 @@ cp .env ".env.$(date +%Y%m%d)"
 ```
 
 ### Working with teams?
-
 ```bash
 # Store with team name
 ./store-env-to-op.sh -f .env -p "team-project" -v "Team Vault"
@@ -152,7 +133,6 @@ cp .env ".env.$(date +%Y%m%d)"
 ```
 
 ### Want to be extra careful?
-
 ```bash
 # Store and immediately verify
 ./store-env-to-op.sh -f .env -p myproject && \
@@ -162,13 +142,11 @@ cp .env ".env.$(date +%Y%m%d)"
 ## Troubleshooting
 
 ### "It says I'm not logged in!"
-
 ```bash
 eval $(op signin)
 ```
 
 ### "It can't find my environment!"
-
 1. List all environments:
    ```bash
    ./retrieve-env-from-op.sh -l
@@ -176,8 +154,20 @@ eval $(op signin)
 2. Check if your project name is correct
 3. Try using interactive mode (-i flag)
 
-### "The verification failed!"
+### "I have multiple values in my .env file"
+Your .env file can contain as many key-value pairs as you need:
+```bash
+# This works fine
+DATABASE_URL=postgres://localhost:5432
+API_KEY=12345
+SECRET_KEY=secret
 
+# Even with comments and blank lines
+# Redis config
+REDIS_URL=redis://localhost:6379
+```
+
+### "The verification failed!"
 1. Use the -k flag to keep temporary files:
    ```bash
    ./verify-store-and-retrieve.sh -f .env -p myproject -k
@@ -186,15 +176,12 @@ eval $(op signin)
 3. Make sure your .env file has no trailing spaces
 
 ### "I got an error about the vault!"
-
 Use interactive mode to see available vaults:
-
 ```bash
 ./store-env-to-op.sh -i -f .env -p myproject
 ```
 
 ## Remember!
-
 - You don't need to remember timestamps
 - Always use `-l` to list available environments
 - When in doubt, use `-i` for interactive mode
