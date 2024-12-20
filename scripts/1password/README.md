@@ -115,6 +115,8 @@ Retrieve specific environment:
 ./retrieve-env-from-op.sh -t env.myapp.development.20241220_143022
 ```
 
+> **Note**: keep an alias to sign in `alias op-signin='eval $(op signin)'`
+
 ## Security Notes
 
 - Scripts automatically check for 1Password CLI authentication
