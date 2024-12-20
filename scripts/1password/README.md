@@ -1,197 +1,147 @@
 # 1Password Environment Management Scripts
 
-A set of scripts to securely store and manage environment variables using 1Password.
+Scripts to store environment variables in 1Password, with each variable as a separate field for easy access.
 
-## Quick Start (The Basics)
+## Quick Start
 
-### 1. Store your .env file
+### Store your .env file
 
 ```bash
-./store-env-to-op.sh -f .env -p myproject -t development
+./store-env-to-op.sh -f .env -p myproject
 ```
 
-### 2. List available environments
+This creates a secure note where each line in your .env becomes a field in 1Password:
+
+```
+HELLO=WORLD    ->  Field "HELLO" with value "WORLD"
+GDAY=MATE      ->  Field "GDAY" with value "MATE"
+```
+
+### Retrieve environment variables
+
+Get all variables (complete .env):
+
+```bash
+./retrieve-env-from-op.sh -t env.myproject.development.20241220_123456 -o .env
+```
+
+Get a single variable:
+
+```bash
+# Get just the DATABASE_URL
+op item get env.myproject.development.20241220_123456 --fields DATABASE_URL
+```
+
+### List available environments
 
 ```bash
 ./retrieve-env-from-op.sh -l -p myproject
 ```
 
-This will show you something like:
-
-```
-📋 Available environment files:
-env.myproject.development.20241220_123456
-env.myproject.staging.20241220_123457
-env.myproject.production.20241220_123458
-```
-
-### 3. Retrieve your .env file
-
-```bash
-# Using the full name from the list
-./retrieve-env-from-op.sh -t env.myproject.development.20241220_123456 -o .env
-```
-
-### 4. Verify everything worked
+### Verify everything worked
 
 ```bash
 ./verify-store-and-retrieve.sh -f .env -p myproject
 ```
 
-## Common Use Cases
+## Why This Approach?
 
-### Working with Multiple Files
+- Each environment variable is a separate field in 1Password
+- Easy to retrieve single values when needed (e.g., just the API key)
+- Works great with 1Password CLI filtering and field selection
+- Simple to integrate with other tools and scripts
+
+## Script Reference
+
+### store-env-to-op.sh
+
+Stores each line in your .env as a separate field in a 1Password secure note.
 
 ```bash
-# Backup your existing .env
-mv .env .env.backup
-
-# Store new environment
-./store-env-to-op.sh -f .env.new -p myproject -t development
-
-# List available versions
-./retrieve-env-from-op.sh -l -p myproject
-
-# Retrieve to a new file
-./retrieve-env-from-op.sh -t <name-from-list> -o .env.new
+./store-env-to-op.sh -f .env -p myproject [-t development] [-v "Personal"]
 ```
 
-### Multiple Environments
+### retrieve-env-from-op.sh
+
+Get all fields as .env or use 1Password CLI for single fields.
+
+```bash
+# Get all fields as .env
+./retrieve-env-from-op.sh -t <name> -o .env
+
+# Or use op cli directly for single fields
+op item get <name> --fields DATABASE_URL
+```
+
+### verify-store-and-retrieve.sh
+
+Verifies that storage and retrieval work correctly.
+
+```bash
+./verify-store-and-retrieve.sh -f .env -p myproject
+```
+
+## Common Examples
+
+### Get a specific value
+
+```bash
+# Get just the API key
+op item get env.myproject.development.20241220_123456 --fields API_KEY
+```
+
+### Store multiple environments
 
 ```bash
 # Store each environment
 ./store-env-to-op.sh -f .env.development -p myproject -t development
 ./store-env-to-op.sh -f .env.production -p myproject -t production
 
-# List all environments for your project
+# List them
 ./retrieve-env-from-op.sh -l -p myproject
 
-# Retrieve specific environment
-./retrieve-env-from-op.sh -t <name-from-list> -o .env.development
+# Get a specific field from production
+op item get env.myproject.production.20241220_123456 --fields DATABASE_URL
 ```
 
-### List All Environments
+### Working with teams
 
 ```bash
-# List all environment files
-./retrieve-env-from-op.sh -l
-
-# Or search for a partial name
-./retrieve-env-from-op.sh -l | grep "myproj"
-```
-
-## Script Reference
-
-### store-env-to-op.sh
-
-```bash
-./store-env-to-op.sh -f .env -p myproject -t development
-```
-
-- `-f .env`: Which file to store (default: .env)
-- `-p myproject`: Project name
-- `-t development`: Environment type (default: development)
-- `-v vault`: Vault name (default: Personal)
-
-### retrieve-env-from-op.sh
-
-```bash
-./retrieve-env-from-op.sh -t <name> -o .env
-```
-
-- `-t name`: Full name of the environment to retrieve
-- `-o .env`: Output file (default: .env)
-- `-l`: List available environments
-- `-p project`: Filter list by project name
-- `-v vault`: Vault name (default: Personal)
-
-### verify-store-and-retrieve.sh
-
-```bash
-./verify-store-and-retrieve.sh -f .env -p myproject
-```
-
-- `-f .env`: File to verify
-- `-p myproject`: Project name
-- `-t type`: Environment type (default: development)
-- `-v vault`: Vault name (default: Personal)
-- `-k`: Keep temp files for debugging
-
-## Tips & Tricks
-
-### Always Backup First!
-
-```bash
-# Quick backup
-cp .env .env.backup
-
-# Dated backup
-cp .env ".env.$(date +%Y%m%d)"
-```
-
-### Working with Teams
-
-```bash
-# Store with team vault
+# Store in team vault
 ./store-env-to-op.sh -f .env -p "team-project" -v "Team Vault"
 
-# List team environments
-./retrieve-env-from-op.sh -l -p "team-project" -v "Team Vault"
-```
-
-### Safe Workflow
-
-```bash
-# Store and immediately verify
-./store-env-to-op.sh -f .env -p myproject && \
-./verify-store-and-retrieve.sh -f .env -p myproject
+# Get production database URL from team vault
+op item get env.team-project.production.20241220_123456 --fields DATABASE_URL --vault "Team Vault"
 ```
 
 ## Troubleshooting
 
-### Authentication Issues
+### Authentication
 
 ```bash
 eval $(op signin)
 ```
 
-### Can't Find Environment
-
-1. List all environments:
-   ```bash
-   ./retrieve-env-from-op.sh -l
-   ```
-2. Make sure to use the FULL name when retrieving
-3. Double-check your vault name with `op vault list`
-
-### Verification Failures
-
-1. Use -k flag to keep temp files:
-   ```bash
-   ./verify-store-and-retrieve.sh -f .env -p myproject -k
-   ```
-2. Check the output for differences
-3. Look for extra whitespace or newlines
-
-### .env File Format
-
-Your .env file should be simple key=value pairs:
+### Can't find environment
 
 ```bash
-# This works fine
-DATABASE_URL=postgres://localhost:5432
-API_KEY=12345
-SECRET_KEY=secret
+# List all environments
+./retrieve-env-from-op.sh -l
 
-# Comments and blank lines are okay
-# Redis config
-REDIS_URL=redis://localhost:6379
+# List environments for specific project
+./retrieve-env-from-op.sh -l -p myproject
+```
+
+### Check field names
+
+```bash
+# See all fields in an environment
+op item get env.myproject.development.20241220_123456 --format=json | jq '.fields[] | .label'
 ```
 
 ## Important Notes
 
-- Always use the FULL environment name when retrieving
-- Use -l to list available environments
-- Make backups before overwriting files
-- Run verify if something seems wrong
-- Keep your .env files simple: just key=value pairs
+- Each line in .env becomes a field in 1Password
+- Use `op item get --fields FIELD_NAME` for single values
+- Use the scripts for full .env management
+- Keep field names simple (no spaces or special characters)
