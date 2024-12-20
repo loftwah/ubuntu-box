@@ -6,7 +6,7 @@ This guide explains how to migrate from a Docker Compose setup to AWS ECS Fargat
 
 ## Key Technologies and Versions
 
-- **Amazon RDS (PostgreSQL)**: `16.1`
+- **Amazon RDS (PostgreSQL)**: `16.3`
 - **Amazon ElastiCache (Redis)**: `7.2`
 - **AWS ECS Fargate**: Platform version `1.5.0`
 - **Terraform AWS Provider**: `5.81.0`
@@ -262,7 +262,7 @@ resource "aws_db_instance" "mydb" {
   allocated_storage     = 20
   max_allocated_storage = 100
   engine                = "postgres"
-  engine_version        = "16.1"
+  engine_version        = "16.3"
   instance_class        = "db.t3.micro"
   db_name               = var.db_name
   username              = var.db_user
@@ -839,7 +839,7 @@ services:
         condition: service_started
 
   db:
-    image: postgres:16.1
+    image: postgres:16.3
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
@@ -1027,7 +1027,7 @@ COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker compose build
 5. **Observability and Debugging**:  
    Use CloudWatch, ECS Exec, and logs to troubleshoot and ensure performance and stability.
 6. **Version Upgrades and Testing**:  
-   Test Postgres 16.1, Redis 7.2, Nginx 1.25.2, and Ruby 3.3.0 in staging first.
+   Test Postgres 16.3, Redis 7.2, Nginx 1.25.2, and Ruby 3.3.0 in staging first.
 7. **CI/CD**:  
    Automate deployments with GitHub Actions, using `actions/checkout@v4` and `aws-actions/configure-aws-credentials@v4` for secure credential management.
 8. **SOC 2 Alignment**:  
