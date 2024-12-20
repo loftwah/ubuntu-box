@@ -797,6 +797,217 @@ By adapting the network configuration based on the environment, you ensure relia
 
 ---
 
+## Local Development Workflow: Simulating ECS-Like Environments
+
+When working with AWS ECS Fargate, you need a local setup that mirrors the ECS environment for testing and debugging. Using **docker compose**, you can replicate ECS-like behavior, enabling faster iterations and more reliable testing before deployment. Here’s how to set up and optimize your local development workflow.
+
+---
+
+### Leveraging `docker-compose.override.yml`
+
+The `docker-compose.override.yml` file allows you to customize local development settings without altering the main `docker-compose.yml`. It’s perfect for setting up environment-specific configurations like volumes, ports, and commands.
+
+#### Base `docker-compose.yml`
+
+```yaml
+name: myapp
+
+services:
+  app:
+    image: your-ecr-repo-url:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    ports:
+      - "8080:3000"
+    environment:
+      DATABASE_URL: "postgres://user:password@db:5432/app"
+      REDIS_URL: "redis://redis:6379"
+      RAILS_ENV: production
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s # Add this
+      retries: 3
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  db:
+    image: postgres:16.1
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: app
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7.2
+
+volumes:
+  db_data:
+```
+
+#### Local `docker-compose.override.yml`
+
+```yaml
+name: myapp
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+      target: development
+    environment:
+      DATABASE_URL: "postgres://localhost:5432/app"
+      REDIS_URL: "redis://localhost:6379"
+      RAILS_ENV: development
+    volumes:
+      - .:/app
+      - bundle:/usr/local/bundle # Add this
+    ports:
+      - "3000:3000"
+      - "1234:1234" # Debugging
+    command: ["bundle", "exec", "rails", "server", "-b", "0.0.0.0"]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  db:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+volumes:
+  db_data:
+  bundle: # Add this to volumes section
+```
+
+---
+
+### Practices for Simulating ECS Locally
+
+#### 1. Use `.env` for Configuration
+
+Manage environment variables through `.env` files. This keeps configurations clean and portable.
+
+**Example `.env.development`**
+
+```dotenv
+DATABASE_URL=postgres://localhost:5432/app
+REDIS_URL=redis://localhost:6379
+RAILS_ENV=development
+```
+
+---
+
+#### 2. A Development-Ready Dockerfile
+
+Streamline your builds with a multi-stage Dockerfile. Add debugging tools for a better local development experience.
+
+```dockerfile
+# Dockerfile.local
+FROM ruby:3.3.0-slim as base
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y build-essential libpq-dev nodejs
+
+# Development stage
+FROM base as development
+RUN apt-get install -y postgresql-client vim ruby-debug-ide  # Add debugging tools
+COPY Gemfile Gemfile.lock ./
+RUN bundle install
+COPY . .
+CMD ["bundle", "exec", "rails", "server", "-b", "0.0.0.0"]
+
+# Production stage
+FROM base as production
+COPY Gemfile Gemfile.lock ./
+RUN bundle install --without development test
+COPY . .
+CMD ["bundle", "exec", "rails", "server", "-b", "0.0.0.0"]
+```
+
+---
+
+#### 3. Mocking AWS Services with LocalStack
+
+Simulate AWS services locally for better integration testing.
+
+**docker compose setup**
+
+```yaml
+localstack:
+  image: localstack/localstack
+  environment:
+    - SERVICES=s3,secretsmanager
+    - AWS_DEFAULT_REGION=ap-southeast-2
+  ports:
+    - "4566:4566"
+```
+
+**Ruby LocalStack Configuration**
+
+```ruby
+Aws.config.update(
+  endpoint: ENV.fetch("AWS_ENDPOINT_URL", "http://localhost:4566"),
+  region: "ap-southeast-2",
+  credentials: Aws::Credentials.new("test", "test")
+)
+```
+
+---
+
+### Debugging with `docker compose exec`
+
+**Example Workflow:**
+
+1. Start the environment:
+
+   ```bash
+   docker compose up --build
+   ```
+
+2. Interact with the application:
+
+   ```bash
+   docker compose exec app bundle exec rails console
+   ```
+
+3. Inspect services:
+
+   ```bash
+   docker compose exec app /bin/bash
+   ```
+
+4. Tear down everything:
+   ```bash
+   docker compose down -v
+   ```
+
+---
+
+### BuildKit Note
+
+For better caching and multi-stage builds, enable BuildKit:
+
+```bash
+COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker compose build
+```
+
+---
+
 ## Best Practices
 
 1. **Infrastructure as Code**:  
