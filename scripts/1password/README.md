@@ -2,137 +2,201 @@
 
 A set of scripts to securely store and manage environment variables using 1Password.
 
-## Prerequisites
+## Quick Start (The Basics)
 
-- 1Password CLI installed and configured
-- `jq` command-line JSON processor
-- Bash shell
-
-## Scripts
-
-### verify-store-and-retrieve.sh
-
-Verifies the integrity of the environment variable storage and retrieval process.
+### 1. Store your .env file
 
 ```bash
-./verify-store-and-retrieve.sh [-f ENV_FILE] [-v VAULT_NAME] [-p PROJECT_NAME] [-t ENV_TYPE] [-x PREFIX]
+./store-env-to-op.sh -f .env -p myproject
 ```
 
-Options:
+### 2. List available environments (instead of remembering timestamps!)
 
-- `-f ENV_FILE`: Source .env file (default: .env)
-- `-v VAULT_NAME`: 1Password vault (default: Personal)
-- `-p PROJECT_NAME`: Project identifier (default: current directory name)
-- `-t ENV_TYPE`: Environment type (development/staging/production/testing)
-- `-x PREFIX`: Custom prefix for items (default: env)
-- `-i`: Interactive vault selection
-- `-k`: Keep temporary files for inspection
-- `-h`: Show help
+```bash
+./retrieve-env-from-op.sh -l -p myproject
+```
 
-Features:
+This will show you something like:
 
-- Performs full store and retrieve cycle
-- Compares original and retrieved files
-- Ignores comments and whitespace differences
-- Shows detailed diff if verification fails
-- Option to keep temporary files for debugging
+```
+Available environment files:
+env.myproject.development.20241220_123456
+env.myproject.staging.20241220_123457
+env.myproject.production.20241220_123458
+```
+
+### 3. Retrieve your .env file
+
+Copy the full name from the list above or just use the project name:
+
+```bash
+# Using project name (will list available envs if multiple exist)
+./retrieve-env-from-op.sh -p myproject -o .env
+
+# Or using the full name (if you know it)
+./retrieve-env-from-op.sh -t env.myproject.development.20241220_123456 -o .env
+```
+
+### 4. Verify everything worked
+
+```bash
+./verify-store-and-retrieve.sh -f .env -p myproject
+```
+
+## Common Use Cases
+
+### "Help! I don't want to overwrite my existing .env!"
+
+```bash
+# Backup your existing .env
+mv .env .env.backup
+
+# Store new environment
+./store-env-to-op.sh -f .env.new -p myproject
+
+# List available versions
+./retrieve-env-from-op.sh -l -p myproject
+
+# Retrieve to a new file
+./retrieve-env-from-op.sh -p myproject -o .env.new
+```
+
+### "I have multiple environments (.env.development, .env.production, etc.)"
+
+```bash
+# Store each environment
+./store-env-to-op.sh -f .env.development -p myproject -t development
+./store-env-to-op.sh -f .env.production -p myproject -t production
+
+# List all environments for your project
+./retrieve-env-from-op.sh -l -p myproject
+
+# Retrieve specific environment (it will show you available options)
+./retrieve-env-from-op.sh -p myproject -t development -o .env.development
+```
+
+### "I don't remember what I named my project!"
+
+```bash
+# List all environment files
+./retrieve-env-from-op.sh -l
+
+# Or search for a partial name
+./retrieve-env-from-op.sh -l | grep "myproj"
+```
+
+### "I want to make sure nothing got messed up"
+
+```bash
+# Verify any environment file
+./verify-store-and-retrieve.sh -f .env -p myproject
+
+# Keep the temp files if something goes wrong
+./verify-store-and-retrieve.sh -f .env -p myproject -k
+```
+
+## Script Reference
 
 ### store-env-to-op.sh
 
-Stores environment variables in 1Password with organized naming and tagging.
-
 ```bash
-./store-env-to-op.sh [-f ENV_FILE] [-v VAULT_NAME] [-p PROJECT_NAME] [-t ENV_TYPE] [-x PREFIX]
+./store-env-to-op.sh -f .env -p myproject [-t development]
 ```
 
-Options:
-
-- `-f ENV_FILE`: Source .env file (default: .env)
-- `-v VAULT_NAME`: 1Password vault (default: Personal)
-- `-p PROJECT_NAME`: Project identifier (default: current directory name)
-- `-t ENV_TYPE`: Environment type (development/staging/production/testing)
-- `-x PREFIX`: Custom prefix for items (default: env)
-- `-i`: Interactive vault selection
-- `-h`: Show help
+- `-f .env`: Which file to store (default: .env)
+- `-p myproject`: Project name
+- `-t development`: Environment type (default: development)
+- `-i`: Interactive mode (shows available vaults)
 
 ### retrieve-env-from-op.sh
 
-Retrieves environment variables from 1Password.
-
 ```bash
-./retrieve-env-from-op.sh [-o OUTPUT_FILE] [-v VAULT_NAME] [-p PROJECT_NAME] [-x PREFIX] -t NOTE_TITLE
+./retrieve-env-from-op.sh -p myproject [-o .env]
 ```
 
-Options:
-
-- `-o OUTPUT_FILE`: Destination file (default: .env)
-- `-v VAULT_NAME`: 1Password vault (default: Personal)
-- `-p PROJECT_NAME`: Filter by project
-- `-x PREFIX`: Item prefix to search for (default: env)
-- `-t NOTE_TITLE`: Title of the note to retrieve
+- `-p myproject`: Project name
+- `-o .env`: Output file (default: .env)
+- `-l`: List available environments
 - `-i`: Interactive mode
-- `-l`: List available environment files
-- `-h`: Show help
 
-## Organization System
-
-Items in 1Password are organized using the following naming convention:
-
-```
-{prefix}.{project}.{environment}.{timestamp}
-```
-
-Example:
-
-```
-env.myapp.development.20241220_143022
-```
-
-Tags are automatically added:
-
-- env
-- secrets
-- {project_name}
-- {environment_type}
-
-## Examples
-
-Store development environment:
+### verify-store-and-retrieve.sh
 
 ```bash
-./store-env-to-op.sh -p myapp -t development
+./verify-store-and-retrieve.sh -f .env -p myproject
 ```
 
-List available environments:
+- `-f .env`: File to verify
+- `-p myproject`: Project name
+- `-k`: Keep temp files if something goes wrong
+
+## Tips & Tricks
+
+### Always backup first!
 
 ```bash
-./retrieve-env-from-op.sh -l -p myapp
+# Quick backup
+cp .env .env.backup
+
+# Dated backup
+cp .env ".env.$(date +%Y%m%d)"
 ```
 
-Retrieve specific environment:
+### Working with teams?
 
 ```bash
-./retrieve-env-from-op.sh -t env.myapp.development.20241220_143022
+# Store with team name
+./store-env-to-op.sh -f .env -p "team-project" -v "Team Vault"
+
+# List team environments
+./retrieve-env-from-op.sh -l -p "team-project" -v "Team Vault"
 ```
 
-> **Note**: keep an alias to sign in `alias op-signin='eval $(op signin)'`
+### Want to be extra careful?
 
-## Security Notes
+```bash
+# Store and immediately verify
+./store-env-to-op.sh -f .env -p myproject && \
+./verify-store-and-retrieve.sh -f .env -p myproject
+```
 
-- Scripts automatically check for 1Password CLI authentication
-- Secure notes are tagged for easy searching and organization
-- Metadata is included in stored files for tracking
-- Overwrite protection for retrieving files
-- Environment types are validated
+## Troubleshooting
 
-## Best Practices
+### "It says I'm not logged in!"
 
-1. Use consistent project names across your team
-2. Include environment type for clarity
-3. Use the list feature to find existing environments
-4. Back up your environment files before overwriting
-5. Use specific vaults for different teams/projects
+```bash
+eval $(op signin)
+```
 
-## Contributing
+### "It can't find my environment!"
 
-Feel free to submit issues and enhancement requests!
+1. List all environments:
+   ```bash
+   ./retrieve-env-from-op.sh -l
+   ```
+2. Check if your project name is correct
+3. Try using interactive mode (-i flag)
+
+### "The verification failed!"
+
+1. Use the -k flag to keep temporary files:
+   ```bash
+   ./verify-store-and-retrieve.sh -f .env -p myproject -k
+   ```
+2. Check the output for differences
+3. Make sure your .env file has no trailing spaces
+
+### "I got an error about the vault!"
+
+Use interactive mode to see available vaults:
+
+```bash
+./store-env-to-op.sh -i -f .env -p myproject
+```
+
+## Remember!
+
+- You don't need to remember timestamps
+- Always use `-l` to list available environments
+- When in doubt, use `-i` for interactive mode
+- Make backups before overwriting files
+- Use the verify script if something seems wrong
