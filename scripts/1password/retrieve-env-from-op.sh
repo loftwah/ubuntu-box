@@ -1,5 +1,5 @@
 #!/bin/bash
-# retrieve-env-from-op.sh - Retrieve .env from 1Password with project organization
+# retrieve-env-from-op.sh - Retrieve .env from 1Password secure note
 
 # Utility functions
 check_op_auth() {
@@ -50,8 +50,8 @@ show_help() {
     echo " -x PREFIX       Item prefix to search for (default: env)"
     echo " -t NOTE_TITLE    Title of the secure note to retrieve"
     echo " -i              Interactive mode - select vault and note"
-    echo " -h              Show this help message"
     echo " -l              List available environment files"
+    echo " -h              Show this help message"
     exit 0
 }
 
@@ -93,5 +93,9 @@ if [[ -f "$OUTPUT_FILE" ]]; then
 fi
 
 # Retrieve the secure note
-op document get "$NOTE_TITLE" --vault "$VAULT_NAME" > "$OUTPUT_FILE"
-echo "Environment variables retrieved to $OUTPUT_FILE"
+if op item get "$NOTE_TITLE" --vault "$VAULT_NAME" --fields notesPlain > "$OUTPUT_FILE"; then
+    echo "✅ Environment variables retrieved to $OUTPUT_FILE"
+else
+    echo "❌ Failed to retrieve environment variables"
+    exit 1
+fi

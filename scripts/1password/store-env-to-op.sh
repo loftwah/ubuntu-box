@@ -1,5 +1,5 @@
 #!/bin/bash
-# store-env-to-op.sh - Store .env in 1Password with project organization
+# store-env-to-op.sh - Store .env in 1Password as a secure note
 
 # Utility functions
 check_op_auth() {
@@ -41,7 +41,7 @@ show_help() {
     echo "Options:"
     echo " -f ENV_FILE      Specify the .env file to process (default: .env)"
     echo " -v VAULT_NAME    Specify the 1Password vault (default: Personal)"
-    echo " -p PROJECT_NAME  Project name for organization (default: current directory name)"
+    echo " -p PROJECT_NAME  Project identifier (default: current directory name)"
     echo " -t ENV_TYPE     Environment type (default: development)"
     echo "                 Valid types: development, staging, production, testing"
     echo " -x PREFIX       Custom prefix for the 1Password item (default: env)"
@@ -84,25 +84,19 @@ esac
 timestamp=$(date +%Y%m%d_%H%M%S)
 note_title="${PREFIX}.${PROJECT_NAME}.${ENV_TYPE}.${timestamp}"
 
-# Build the note content with metadata header
+# Build note content with metadata
 note_content="# Environment Variables for ${PROJECT_NAME}\n"
 note_content+="# Environment: ${ENV_TYPE}\n"
 note_content+="# Created: $(date -u '+%Y-%m-%d %H:%M:%S UTC')\n"
 note_content+="# Project: ${PROJECT_NAME}\n\n"
+note_content+="$(cat "$ENV_FILE")"
 
-while IFS='=' read -r key value; do
-    [[ -z "$key" || "$key" =~ ^# ]] && continue
-    key=$(echo "$key" | xargs)
-    value=$(echo "$value" | xargs)
-    note_content+="$key=$value\n"
-done < "$ENV_FILE"
-
-# Store as a secure note with all variables
-op document create - \
-    --title "$note_title" \
-    --vault "$VAULT_NAME" \
-    --tags "env,secrets,${PROJECT_NAME},${ENV_TYPE}" \
-    <<< "$note_content"
-
-echo "Environment variables stored in 1Password as '$note_title'"
-echo "Tags added: env, secrets, ${PROJECT_NAME}, ${ENV_TYPE}"
+# Store as secure note
+if op item create --category "Secure Note" --vault "$VAULT_NAME" --title "$note_title" \
+   --tags "env,secrets,${PROJECT_NAME},${ENV_TYPE}" --notes-plain "$note_content"; then
+    echo "✅ Environment variables stored in 1Password as '$note_title'"
+    echo "Tags added: env, secrets, ${PROJECT_NAME}, ${ENV_TYPE}"
+else
+    echo "❌ Failed to store environment variables"
+    exit 1
+fi

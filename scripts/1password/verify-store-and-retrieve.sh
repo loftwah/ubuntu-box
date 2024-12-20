@@ -3,17 +3,19 @@
 
 # Utility functions
 check_op_auth() {
-    if ! op account list >/dev/null 2>&1; then
-        echo "Error: Not signed in to 1Password CLI. Please sign in first using 'eval \$(op signin)'."
+    echo "🔐 Checking 1Password authentication..."
+    if ! op account list; then
+        echo "❌ Error: Not signed in to 1Password CLI. Please sign in first using 'eval \$(op signin)'."
         exit 1
     fi
+    echo "✅ Authentication verified"
 }
 
 select_vault() {
     local default_vault="$1"
     
-    echo "Available vaults:"
-    op vault list --format=json | jq -r '.[] | .name'
+    echo "📚 Available vaults:"
+    op vault list
     
     read -p "Select vault (press Enter for default '$default_vault'): " selected_vault
     echo ${selected_vault:-$default_vault}
@@ -21,10 +23,16 @@ select_vault() {
 
 validate_env_file() {
     local env_file="$1"
+    echo "📋 Validating .env file: $env_file"
     if [[ ! -f "$env_file" ]]; then
-        echo "Error: $env_file does not exist."
+        echo "❌ Error: $env_file does not exist."
         return 1
     fi
+    echo "✅ File exists"
+    echo "📄 File contents:"
+    echo "-------------------"
+    cat "$env_file"
+    echo "-------------------"
     return 0
 }
 
@@ -32,9 +40,15 @@ compare_env_files() {
     local original="$1"
     local retrieved="$2"
     
+    echo "🔍 Comparing files..."
+    echo "📄 Original: $original"
+    echo "📄 Retrieved: $retrieved"
+    
     # Create temporary files with sorted, normalized content
     local temp_orig=$(mktemp)
     local temp_retr=$(mktemp)
+    
+    echo "🔄 Processing files for comparison..."
     
     # Process files: remove comments, sort, and normalize whitespace
     grep -v '^#' "$original" | sort | sed 's/[[:space:]]*=[[:space:]]*/=/' > "$temp_orig"
@@ -47,7 +61,9 @@ compare_env_files() {
     else
         echo "❌ Verification failed: Files differ"
         echo "Differences found:"
+        echo "-------------------"
         diff -u "$temp_orig" "$temp_retr" | grep -E '^\+|\-' | grep -v '^\+\+\+|\-\-\-'
+        echo "-------------------"
         local result=1
     fi
     
@@ -81,9 +97,10 @@ show_help() {
 
 cleanup() {
     if [[ "$KEEP_TEMPS" != "true" ]]; then
+        echo "🧹 Cleaning up temporary files..."
         rm -f "$TEMP_RETRIEVE_FILE"
     else
-        echo "Temporary files kept for inspection:"
+        echo "🔍 Temporary files kept for inspection:"
         echo "Retrieved file: $TEMP_RETRIEVE_FILE"
     fi
 }
@@ -115,38 +132,27 @@ fi
 case "$ENV_TYPE" in
     development|staging|production|testing) ;;
     *)
-        echo "Error: Invalid environment type. Must be one of: development, staging, production, testing"
+        echo "❌ Error: Invalid environment type. Must be one of: development, staging, production, testing"
         exit 1
         ;;
 esac
 
 echo "🔄 Starting verification process..."
-echo "Project: $PROJECT_NAME"
-echo "Environment: $ENV_TYPE"
+echo "📂 Project: $PROJECT_NAME"
+echo "🌍 Environment: $ENV_TYPE"
+echo "🔐 Vault: $VAULT_NAME"
+echo "📄 ENV File: $ENV_FILE"
 
 # Step 1: Store the environment file
 echo "📤 Storing environment file..."
 timestamp=$(date +%Y%m%d_%H%M%S)
 note_title="${PREFIX}.${PROJECT_NAME}.${ENV_TYPE}.${timestamp}"
 
-# Build the note content with metadata
-note_content="# Environment Variables for ${PROJECT_NAME}\n"
-note_content+="# Environment: ${ENV_TYPE}\n"
-note_content+="# Created: $(date -u '+%Y-%m-%d %H:%M:%S UTC')\n"
-note_content+="# Project: ${PROJECT_NAME}\n\n"
+echo "📝 Creating secure note with title: $note_title"
 
-while IFS='=' read -r key value; do
-    [[ -z "$key" || "$key" =~ ^# ]] && continue
-    key=$(echo "$key" | xargs)
-    value=$(echo "$value" | xargs)
-    note_content+="$key=$value\n"
-done < "$ENV_FILE"
-
-if ! op document create - \
-    --title "$note_title" \
-    --vault "$VAULT_NAME" \
-    --tags "env,secrets,${PROJECT_NAME},${ENV_TYPE}" \
-    <<< "$note_content"; then
+# Create the secure note with the env file content
+if ! op item create --category "Secure Note" --title "$note_title" --vault "$VAULT_NAME" \
+    --tags "env,secrets,${PROJECT_NAME},${ENV_TYPE}" "content[text]=$(cat "$ENV_FILE")"; then
     echo "❌ Failed to store environment file"
     exit 1
 fi
@@ -155,10 +161,16 @@ echo "✅ Stored as: $note_title"
 
 # Step 2: Retrieve the environment file
 echo "📥 Retrieving environment file..."
-if ! op document get "$note_title" --vault "$VAULT_NAME" > "$TEMP_RETRIEVE_FILE"; then
+echo "🔍 Looking up item: $note_title"
+if ! op item get "$note_title" --vault "$VAULT_NAME" --fields content > "$TEMP_RETRIEVE_FILE"; then
     echo "❌ Failed to retrieve environment file"
     exit 1
 fi
+
+echo "📄 Retrieved content:"
+echo "-------------------"
+cat "$TEMP_RETRIEVE_FILE"
+echo "-------------------"
 
 # Step 3: Compare files
 echo "🔍 Comparing original and retrieved files..."
