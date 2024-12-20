@@ -9,7 +9,7 @@ This guide explains how to migrate from a Docker Compose setup to AWS ECS Fargat
 - **Amazon RDS (PostgreSQL)**: `16.1`
 - **Amazon ElastiCache (Redis)**: `7.2`
 - **AWS ECS Fargate**: Platform version `1.5.0`
-- **Terraform AWS Provider**: `5.81.0` (updated to ensure current accuracy)
+- **Terraform AWS Provider**: `5.81.0`
 - **Nginx Docker Image**: `nginx:1.25.2`
 - **Ruby (Rails) Docker Image**: `ruby:3.3.0`
 
