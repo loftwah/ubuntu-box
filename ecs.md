@@ -1033,60 +1033,539 @@ Here’s a structured **## References** section for your document, including the
 
 ---
 
-## References
+## References and Considerations
 
-Below is a list of Terraform resource types used in the infrastructure, along with links to their official documentation:
+This section provides a comprehensive list of Terraform resources used in the infrastructure. Each resource is documented with its purpose, required and optional configurations, and their implications in the larger system. Understanding these resources and their relationships is crucial for building a robust ECS infrastructure.
+
+---
 
 ### Elastic Container Registry (ECR)
 
-- [aws_ecr_repository](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecr_repository)
+#### [aws_ecr_repository](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecr_repository)
+
+- **Purpose**: Serves as your private container registry, storing and managing Docker images that your ECS tasks will use. This resource is fundamental to your container infrastructure as it provides a secure, scalable way to distribute your application images.
+
+**Required**:
+- **Name**: Forms your repository's unique identifier and becomes part of your image URI. The name you choose affects how you'll reference images in task definitions and CI/CD pipelines. Consider a hierarchical naming scheme like `${org}-${app}-${component}` (e.g., `acme-web-api`) for clarity and organization.
+
+**Optional**:
+- **Image Tag Mutability**: A critical security and deployment control:
+  - `MUTABLE`: Enables overwriting tags, simplifying development but risking deployment inconsistency.
+  - `IMMUTABLE`: Prevents tag overwriting, ensuring deployment reliability and audit compliance.
+- **Image Scanning**: Automates vulnerability detection in your container images. The enablement decision impacts your security posture and deployment pipeline speed.
+- **Lifecycle Policies**: Manages repository growth and cost through automated cleanup rules. Consider retention requirements for rollbacks and compliance when configuring.
+
+**Resource Relationships**:
+- ECS task definitions depend on this for image references
+- CI/CD pipelines need push access through IAM roles
+- VPC endpoints may be required for private image pulls
+
+---
 
 ### Elastic Container Service (ECS)
 
-- [aws_ecs_cluster](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_cluster)
-- [aws_ecs_service](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_service)
-- [aws_ecs_task_definition](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_task_definition)
+#### [aws_ecs_cluster](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_cluster)
+
+- **Purpose**: Functions as your container orchestration platform's control plane, managing the placement, scheduling, and operation of your containers. This is the foundation upon which all your containerized applications will run.
+
+**Required**:
+- **Name**: Identifies your cluster uniquely within your AWS account. Choose a name that reflects its environment and purpose, such as `${org}-${env}-cluster` (e.g., `acme-prod-cluster`), as this name appears in logs and metrics.
+
+**Optional**:
+- **Capacity Providers**: Determines the underlying compute platform:
+  - `FARGATE`: Offers serverless operation with per-second billing, ideal for variable workloads.
+  - `EC2`: Provides more control and potential cost savings for predictable workloads.
+- **Container Insights**: Enables detailed monitoring and metrics collection. The cost impact (roughly $2.50 per day per cluster) should be weighed against observability needs.
+- **Execute Command**: Enables interactive debugging capabilities, crucial for troubleshooting but requires careful security consideration.
+
+**Resource Relationships**:
+- Services and tasks run within the cluster context
+- Capacity providers affect networking and scaling behavior
+- CloudWatch receives metrics and logs from the cluster
+
+#### [aws_ecs_service](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_service)
+
+- **Purpose**: Manages the deployment and maintenance of your containerized applications, ensuring the desired number of tasks remain healthy and available. This resource handles the operational aspects of your containers.
+
+**Required**:
+- **Cluster**: References the ECS cluster where this service will run. The choice of cluster affects resource availability and networking options.
+- **Task Definition**: Specifies the container configuration to deploy. This is your application's blueprint.
+- **Desired Count**: Determines how many copies of your task should run simultaneously. Consider high availability needs and cost implications.
+
+**Optional**:
+- **Load Balancer**: Enables traffic distribution across tasks. Essential for web applications:
+  - Impacts how your application receives traffic
+  - Affects service discovery options
+  - Influences scaling behavior
+- **Auto Scaling**: Automatically adjusts task count based on metrics:
+  - CPU and memory utilization
+  - Custom metrics
+  - Schedule-based scaling
+- **Deployment Configuration**: Controls how updates roll out:
+  - Rolling updates
+  - Blue/green deployments
+  - Circuit breaker settings
+
+**Resource Relationships**:
+- Depends on ECS cluster and task definitions
+- Integrates with load balancers and target groups
+- Uses IAM roles for task execution
+- May require service discovery configuration
+
+#### [aws_ecs_task_definition](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_task_definition)
+
+- **Purpose**: Defines the complete specification for running your containers, including resource requirements, networking, storage, and security settings. This is your application's contract with ECS.
+
+**Required**:
+- **Container Definitions**: The core specification of your application:
+  - Image: References your ECR repository
+  - CPU/Memory: Resource allocations
+  - Port mappings: Network exposure
+  - Environment variables: Configuration
+  - These decisions directly impact application performance and cost
+- **Execution Role**: Grants ECS permission to:
+  - Pull container images
+  - Send logs to CloudWatch
+  - Access secrets
+  Without proper permissions, tasks cannot start
+
+**Optional**:
+- **Task Role**: Grants containers permission to access AWS services:
+  - Consider least privilege principles
+  - Separate roles for different services
+- **Network Mode**: Determines container networking:
+  - `awsvpc`: Required for Fargate, provides ENI per task
+  - `bridge`: Traditional Docker networking
+  - `host`: Direct host network access
+- **Volumes**: Enables persistent storage:
+  - EFS for shared filesystem access
+  - Bind mounts for local storage
+  - Consider data persistence needs
+- **Secrets**: Securely injects sensitive data:
+  - Secrets Manager for credentials
+  - SSM Parameters for configuration
+  - Affects security posture and maintenance
+
+**Resource Relationships**:
+- References ECR repositories for images
+- Uses IAM roles for permissions
+- Integrates with EFS for storage
+- Connects to CloudWatch for logging
+
+---
 
 ### Elastic File System (EFS)
 
-- [aws_efs_file_system](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/efs_file_system)
-- [aws_efs_access_point](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/efs_access_point)
-- [aws_efs_mount_target](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/efs_mount_target)
+#### [aws_efs_file_system](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/efs_file_system)
+
+- **Purpose**: Provides scalable, persistent storage that can be shared across multiple ECS tasks and availability zones. Essential for applications requiring shared state or persistent data.
+
+**Required**:
+- **Creation Token**: Ensures idempotent filesystem creation. Use a meaningful identifier that reflects the filesystem's purpose.
+
+**Optional**:
+- **Encrypted**: Controls data-at-rest encryption:
+  - Should generally be enabled for production
+  - Can use custom KMS keys
+  - Impacts performance minimally
+- **Performance Mode**: Balances performance characteristics:
+  - `generalPurpose`: Default, good for most workloads
+  - `maxIO`: Higher latency but better for parallel access
+- **Throughput Mode**: Controls filesystem performance:
+  - `bursting`: Good for variable workloads
+  - `provisioned`: Predictable performance at higher cost
+- **Lifecycle Policy**: Manages cost for infrequently accessed data
+
+**Resource Relationships**:
+- Mount targets connect to VPC subnets
+- Security groups control access
+- Access points provide application-specific entry points
+
+#### [aws_efs_access_point](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/efs_access_point)
+
+- **Purpose**: Creates application-specific entry points to your EFS filesystem, enforcing file system isolation and access control between different applications sharing the same filesystem.
+
+**Optional**:
+- **Root Directory**: Controls filesystem visibility:
+  - Path to expose to applications
+  - Creation settings for new directories
+- **POSIX User**: Enforces access permissions:
+  - UID/GID mapping
+  - File ownership controls
+- **Tags**: Organize and track access points
+
+**Resource Relationships**:
+- Connects to EFS filesystem
+- Referenced in ECS task definitions
+- May require security group rules
+
+#### [aws_efs_mount_target](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/efs_mount_target)
+
+- **Purpose**: Creates network interfaces that allow ECS tasks to connect to your EFS filesystem from within their VPC subnets. Without mount targets, your filesystem is inaccessible.
+
+**Required**:
+- **File System ID**: Links to your EFS filesystem. Each filesystem needs at least one mount target to be useful.
+- **Subnet ID**: Places the mount target in your VPC. Deploy in each AZ where your tasks might run.
+- **Security Groups**: Control network access to the filesystem.
+
+**Resource Relationships**:
+- Depends on EFS filesystem
+- Requires VPC subnet placement
+- Security groups must allow NFS traffic
+
+---
 
 ### CloudWatch Logs
 
-- [aws_cloudwatch_log_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group)
+#### [aws_cloudwatch_log_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group)
+
+- **Purpose**: Centralizes log collection and retention for your ECS tasks, enabling monitoring, troubleshooting, and compliance needs. This is your primary window into application behavior.
+
+**Required**:
+- **Name**: Creates the logical container for your logs. Use a structured naming scheme like `/ecs/${app-name}/${environment}` for easy identification and management.
+
+**Optional**:
+- **Retention in Days**: Controls log lifetime:
+  - Balance storage costs with compliance needs
+  - Common values: 30, 60, 90 days
+  - Infinite retention possible but expensive
+- **KMS Encryption**: Protects sensitive log data
+- **Export to S3**: Enables long-term archival
+- **Metric Filters**: Creates metrics from log patterns
+
+**Resource Relationships**:
+- ECS tasks send logs here
+- IAM roles need log writing permissions
+- May integrate with external log aggregation
+
+---
 
 ### Application Load Balancer (ALB)
 
-- [aws_lb](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lb)
-- [aws_lb_target_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lb_target_group)
-- [aws_lb_listener](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lb_listener)
+#### [aws_lb](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lb)
+
+- **Purpose**: Distributes incoming application traffic across your ECS tasks, providing a single entry point while enabling high availability and scalability. Essential for web applications.
+
+**Required**:
+- **Name**: Identifies your load balancer. Choose a name that reflects its role and environment.
+- **Subnets**: Places the ALB in your VPC:
+  - Public subnets for internet-facing applications
+  - Private subnets for internal services
+- **Security Groups**: Control traffic access
+
+**Optional**:
+- **Internal**: Determines visibility:
+  - `true` for internal services
+  - `false` for internet-facing applications
+- **Access Logs**: Enables request tracking:
+  - S3 bucket for storage
+  - Retention settings
+  - Cost implications
+- **Deletion Protection**: Prevents accidental removal
+
+**Resource Relationships**:
+- Target groups define backend services
+- Listeners configure traffic handling
+- Security groups control access
+- Route 53 for DNS integration
+
+#### [aws_lb_target_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lb_target_group)
+
+- **Purpose**: Defines how the load balancer checks health and routes traffic to your ECS tasks. This resource bridges the gap between your load balancer and containers.
+
+**Required**:
+- **Target Type**: Must be 'ip' for Fargate tasks
+- **VPC ID**: Places the target group in your VPC
+- **Protocol/Port**: Defines how traffic reaches containers
+- **Health Check**: Ensures container availability:
+  - Path to check
+  - Success criteria
+  - Check frequency
+
+**Optional**:
+- **Stickiness**: Maintains user sessions:
+  - Cookie-based persistence
+  - Duration settings
+- **Deregistration Delay**: Allows in-flight requests:
+  - Grace period for shutdowns
+  - Impact on deployments
+- **Load Balancing Algorithm**: Traffic distribution method
+
+**Resource Relationships**:
+- Referenced by ECS services
+- Used by ALB listeners
+- May require security group rules
+
+#### [aws_lb_listener](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lb_listener)
+
+- **Purpose**: Configures how your load balancer accepts and processes incoming traffic, defining the entry points for your application.
+
+**Required**:
+- **Load Balancer ARN**: Links to your ALB
+- **Port**: Defines the listening port:
+  - 80 for HTTP
+  - 443 for HTTPS
+- **Protocol**: Matches the port:
+  - HTTP/HTTPS most common
+  - TCP/TLS for lower-level protocols
+- **Default Action**: Handles unmatched requests:
+  - Forward to target group
+  - Return fixed response
+  - Redirect
+
+**Optional**:
+- **SSL Certificate**: Required for HTTPS:
+  - ACM certificate reference
+  - Multiple certificates possible
+- **SSL Policy**: Security configuration:
+  - Protocol versions
+  - Cipher suites
+- **Rules**: Advanced routing:
+  - Path-based routing
+  - Host-based routing
+  - Query string conditions
+
+**Resource Relationships**:
+- Belongs to a load balancer
+- References target groups
+- May use ACM certificates
+- Can trigger Lambda functions
+
+---
 
 ### Identity and Access Management (IAM)
 
-- [aws_iam_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role)
-- [aws_iam_role_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy)
-- [aws_iam_role_policy_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment)
+#### [aws_iam_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role)
+
+- **Purpose**: Defines permissions that AWS services (like ECS) can assume to interact with other AWS resources. Critical for security and access control.
+
+**Required**:
+- **Name**: Uniquely identifies the role:
+  - Use descriptive names like `ecs-task-execution-role`
+  - Include purpose and environment
+- **Assume Role Policy**: Specifies who can use the role:
+  - JSON policy document
+  - Typically allows ECS service
+
+**Optional**:
+- **Description**: Documents the role's purpose
+- **Path**: Organizes roles hierarchically
+- **Force Detach Policies**: Handles cleanup
+- **Max Session Duration**: Controls temporary credentials
+- **Permissions Boundary**: Limits maximum permissions
+
+**Resource Relationships**:
+- Used by ECS tasks and services
+- Attached to task definitions
+- Referenced in service configurations
+
+#### [aws_iam_role_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy)
+
+- **Purpose**: Defines custom permissions for your IAM roles when AWS managed policies don't provide the exact permissions needed.
+
+**Required**:
+- **Role**: References the IAM role
+- **Policy**: JSON document defining:
+  - Allowed actions
+  - Resource restrictions
+  - Conditions for access
+
+**Optional**:
+- **Name**: Identifies the policy
+- **Name Prefix**: Generates unique names
+- **Description**: Documents purpose
+
+**Resource Relationships**:
+- Attached to IAM roles
+- Defines service permissions
+- May reference various AWS resources
+
+#### [aws_iam_role_policy_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment)
+
+- **Purpose**: Attaches AWS managed policies to your roles, providing standardized permissions sets that AWS maintains.
+
+**Required**:
+- **Role**: The receiving role
+- **Policy ARN**: The managed policy to attach:
+  - AWSECSTaskExecutionRolePolicy
+  - AWSECSServiceRolePolicy
+  - Custom policy ARNs
+
+**Resource Relationships**:
+- Connects roles to policies
+- Referenced by ECS services
+- Part of task execution roles
+
+---
 
 ### Security Groups
 
-- [aws_security_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group)
-- [aws_security_group_rule](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group_rule)
+#### [aws_security_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group)
+
+- **Purpose**: Controls inbound and outbound network traffic for your AWS resources, acting as a virtual firewall at the instance level. Critical for securing your ECS infrastructure.
+
+**Required**:
+- **VPC ID**: Places the security group in your VPC. This association cannot be changed after creation, so choose carefully based on your network architecture.
+- **Name**: Identifies the group uniquely within your VPC. Consider a naming convention like `${component}-${env}-sg` (e.g., `ecs-tasks-prod-sg`) for clear identification.
+
+**Optional**:
+- **Description**: Documents the group's purpose and rules. crucial for team understanding and compliance.
+- **Tags**: Enable resource organization and cost tracking.
+- **Ingress Rules**: Define allowed inbound traffic (though better managed through separate rules).
+- **Egress Rules**: Specify allowed outbound traffic (though better managed through separate rules).
+
+**Resource Relationships**:
+- Used by ECS tasks, ALBs, and EFS mount targets
+- Referenced in service definitions
+- Interacts with other security groups through rules
+- Must align with VPC CIDR ranges
+
+#### [aws_security_group_rule](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group_rule)
+
+- **Purpose**: Defines specific inbound or outbound traffic rules for security groups. Separating rules from group definitions improves maintainability and reduces conflicts in team environments.
+
+**Required**:
+- **Type**: Specifies `ingress` (inbound) or `egress` (outbound). This fundamentally defines the rule's purpose.
+- **Security Group ID**: Links to the security group this rule modifies.
+- **Protocol**: Specifies allowed protocols (e.g., tcp, udp, icmp).
+- **From Port** and **To Port**: Define the port range for the rule.
+- **Source/Destination**: Determines allowed traffic sources/destinations through CIDR blocks or security group IDs.
+
+**Optional**:
+- **Description**: Documents the rule's specific purpose.
+- **Self**: Allows references to the security group itself.
+- **Prefix List IDs**: References AWS-managed prefix lists.
+
+**Resource Relationships**:
+- Belongs to specific security groups
+- May reference other security groups
+- Impacts network accessibility of resources
+- Must align with application requirements
+
+---
 
 ### VPC Endpoints
 
-- [aws_vpc_endpoint](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_endpoint)
+#### [aws_vpc_endpoint](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_endpoint)
+
+- **Purpose**: Enables private communication between your VPC and AWS services without traversing the public internet. Essential for secure and reliable service access in private subnets.
+
+**Required**:
+- **VPC ID**: Associates the endpoint with your VPC. This defines the network context for private access.
+- **Service Name**: Specifies which AWS service to connect to (e.g., `com.amazonaws.region.ecr.api`). The choice depends on which AWS services your applications need to access privately.
+
+**Optional**:
+- **VPC Endpoint Type**: Determines the endpoint's behavior:
+  - `Interface`: Creates an ENI with a private IP
+  - `Gateway`: Uses route tables for S3 and DynamoDB
+- **Subnet IDs**: Required for interface endpoints, determines availability.
+- **Security Group IDs**: Controls access to interface endpoints.
+- **Private DNS**: Enables use of default AWS service DNS names.
+- **Policy**: Restricts what actions can be performed through the endpoint.
+
+**Resource Relationships**:
+- Integrates with VPC networking
+- Supports ECS service communication
+- May require security group configurations
+- Affects service DNS resolution
+
+---
 
 ### ACM Certificate
 
-- [aws_acm_certificate](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/acm_certificate)
+#### [aws_acm_certificate](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/acm_certificate)
+
+- **Purpose**: Manages SSL/TLS certificates for securing application traffic. Essential for any public-facing applications requiring HTTPS.
+
+**Required**:
+- **Domain Name**: Specifies the domain to secure (e.g., `*.example.com`). Must match your application's domain name requirements.
+
+**Optional**:
+- **Validation Method**: Controls how certificate ownership is verified:
+  - `DNS`: Automated validation through Route 53 or manual DNS records
+  - `EMAIL`: Traditional email-based validation
+- **Subject Alternative Names**: Adds additional domain names to the certificate
+- **Tags**: Organizes and tracks certificates
+
+**Resource Relationships**:
+- Used by ALB listeners for HTTPS
+- May integrate with Route 53 for DNS validation
+- Referenced in listener configurations
+- Affects application security posture
+
+---
 
 ### Secrets Management
 
-- [aws_ssm_parameter](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter)
-- [aws_secretsmanager_secret](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret)
-- [aws_secretsmanager_secret_version](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret_version)
+#### [aws_ssm_parameter](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter)
+
+- **Purpose**: Stores configuration values and non-sensitive secrets. Ideal for environment-specific settings and application configuration.
+
+**Required**:
+- **Name**: Creates a unique identifier, typically using hierarchical paths like `/app/${env}/${component}/${param}`.
+- **Type**: Defines the parameter type:
+  - `String`: Basic text values
+  - `StringList`: Comma-separated values
+  - `SecureString`: Encrypted values
+- **Value**: The actual parameter value to store.
+
+**Optional**:
+- **Description**: Documents the parameter's purpose and usage.
+- **KMS Key ID**: For custom encryption of SecureString parameters.
+- **Tier**: Determines parameter capabilities and cost:
+  - `Standard`: Free, basic parameters
+  - `Advanced`: Larger values, higher cost
+- **Tags**: Enables organization and tracking.
+
+**Resource Relationships**:
+- Referenced in ECS task definitions
+- Used for application configuration
+- May require IAM permissions for access
+- Can integrate with KMS for encryption
+
+#### [aws_secretsmanager_secret](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret)
+
+- **Purpose**: Manages sensitive information like credentials, API keys, and other secrets. Provides additional features beyond SSM Parameter Store.
+
+**Required**:
+- **Name**: Uniquely identifies the secret. Use a descriptive naming scheme like `${app}/${env}/${purpose}`.
+
+**Optional**:
+- **Description**: Documents the secret's purpose and contents.
+- **KMS Key ID**: Specifies a custom encryption key.
+- **Policy**: Controls access through IAM policies.
+- **Recovery Window**: Sets deletion grace period.
+- **Rotation**: Configures automatic secret rotation:
+  - Lambda function
+  - Rotation schedule
+  - Rotation rules
+
+**Resource Relationships**:
+- Referenced in task definitions
+- May use KMS for encryption
+- Requires IAM permissions for access
+- Can trigger Lambda functions
+
+#### [aws_secretsmanager_secret_version](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret_version)
+
+- **Purpose**: Manages different versions of secrets, enabling secret rotation and providing rollback capabilities.
+
+**Required**:
+- **Secret ID**: References the parent secret this version belongs to.
+- **Secret String**: Contains the sensitive value to store.
+
+**Optional**:
+- **Version Stages**: Labels versions for different purposes:
+  - `AWSCURRENT`: Active version
+  - `AWSPENDING`: Next version
+  - `AWSPREVIOUS`: Last active version
+- **Version ID**: Automatically generated unique identifier.
+
+**Resource Relationships**:
+- Belongs to a Secrets Manager secret
+- Referenced in applications
+- Part of secret rotation workflow
+- May require specific IAM permissions
 
 ---
 
