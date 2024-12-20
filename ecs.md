@@ -1636,3 +1636,65 @@ This section provides a comprehensive list of Terraform resources used in the in
 ---
 
 By following these steps, configurations, and best practices, you can confidently migrate from Docker Compose to a fully managed, scalable, secure, and SOC 2-aligned ECS Fargate environment. This guide ensures that all details, versions, credential actions, Terraform configurations, secrets management, and compliance measures are accurately represented and up-to-date.
+
+## Todo
+
+Areas that could be enhanced:
+
+1. **Cost Optimization**:
+
+   - Auto-scaling policies and thresholds
+   - Spot instances for non-critical workloads
+   - Cost comparison between different instance types
+   - Reserved capacity planning
+
+2. **Disaster Recovery**:
+
+   - Backup strategies
+   - Multi-region deployment considerations
+   - Recovery Time Objective (RTO) and Recovery Point Objective (RPO) guidelines
+   - Failover procedures
+
+3. **Monitoring & Alerting**:
+
+   - CloudWatch dashboard examples
+   - Common alert thresholds
+   - APM integration (New Relic, Datadog)
+   - Log aggregation strategies
+
+4. **Performance Optimization**:
+
+   - Container optimization techniques
+   - Cache strategies
+   - ECS capacity provider strategies
+   - Performance testing methodologies
+
+5. **Migration Strategies**:
+
+   - Blue-green deployment details
+   - Canary deployment patterns
+   - Database migration handling
+   - Zero-downtime deployment strategies
+
+6. **Service Mesh Integration**:
+
+   - AWS App Mesh configuration
+   - Service discovery patterns
+   - Inter-service communication
+
+7. **Security Hardening**:
+
+   - Container image scanning
+   - Runtime security monitoring
+   - Network policy examples
+   - Security incident response procedures
+
+Additional suggestions:
+
+1. Include a troubleshooting section with common issues and solutions
+2. Add example application architectures for different use cases
+3. Provide maintenance and upgrade procedures
+4. Include capacity planning guidelines
+5. Add more real-world examples of scaling patterns
+
+---
