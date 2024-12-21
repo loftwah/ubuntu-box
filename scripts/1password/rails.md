@@ -1,7 +1,5 @@
 # Rails 1Password Integration Guide: A Practical Approach
 
-[1password Service Accounts](https://developer.1password.com/docs/service-accounts/) | [1password Connect](https://developer.1password.com/docs/connect/)
-
 ## Introduction
 
 This guide provides a complete walkthrough of integrating 1Password with Ruby and Rails applications using the 1Password CLI with service accounts. We've deliberately chosen this approach over 1Password Connect for several important reasons.
@@ -71,27 +69,140 @@ For staging, production, and automated environments, we use service accounts. Th
 
 ### Secret Storage Structure
 
-All secrets are stored as JSON in 1Password secure notes. For example:
+In 1Password, we store our secrets as secure notes where each note has two essential components:
+
+1. The note's name (this is critical for retrieval)
+2. The secrets themselves (stored as JSON in the note's content)
+
+For example, a secure note would be structured like this:
+
+Name: `env.myapp.production`
+
+```ruby
+# This is how we'll retrieve it in our code:
+op item get "env.myapp.production" --field notesPlain
+```
+
+Content (stored in the note's `notesPlain` field):
 
 ```json
 {
   "DATABASE_URL": "postgres://user:pass@host:5432/db",
   "REDIS_URL": "redis://localhost:6379/0",
-  "AWS_ACCESS_KEY_ID": "AKIA...",
-  "AWS_SECRET_ACCESS_KEY": "abc123..."
+  "AWS_ACCESS_KEY_ID": "AKIA..."
 }
 ```
 
-This approach provides:
+The naming convention `env.{application}.{environment}` is crucial because:
 
-- Atomic updates for related secrets
-- Easy environment variable loading
-- Simple secret rotation
-- Clear organization by environment
+1. It's how we locate our secrets using the CLI
+2. It provides a consistent pattern across environments
+3. It makes automation and secret rotation reliable
+4. It helps prevent accessing the wrong environment's secrets
+
+For example, you might have these secure notes:
+
+- `env.myapp.development` - Local development secrets
+- `env.myapp.staging` - Staging environment secrets
+- `env.myapp.production` - Production environment secrets
+- `env.otherapp.production` - Another application's production secrets
+
+When retrieving secrets, the name must match exactly:
+
+```ruby
+def fetch_secrets
+  app_name = Rails.application.class.module_parent_name.downcase
+  note_name = "env.#{app_name}.#{Rails.env}"  # This must match the secure note's name exactly
+
+  result = `op item get "#{note_name}" --field notesPlain`.strip
+  if result.empty?
+    raise "Failed to fetch secrets: Could not find secure note named '#{note_name}'"
+  end
+  result
+end
+```
 
 ## Implementation Guide
 
-### 1. Development Environment Setup
+### Secret Management Service
+
+Instead of having separate managers for development and production, we can create a single, environment-aware secrets manager:
+
+```ruby
+# app/services/secrets_manager.rb
+class SecretsManager
+  class << self
+    def load_secrets
+      return if Rails.env.test?  # Skip for test environment
+
+      ensure_authentication
+      load_environment_secrets
+    end
+
+    private
+
+    def ensure_authentication
+      if Rails.env.development?
+        unless system('op user get --me > /dev/null 2>&1')
+          puts "\n⚠️  Please sign in to 1Password CLI:"
+          raise "Failed to authenticate" unless system('op signin')
+        end
+      else
+        # Production-like environments use service account
+        raise "OP_SERVICE_ACCOUNT_TOKEN must be set" if ENV['OP_SERVICE_ACCOUNT_TOKEN'].blank?
+      end
+    end
+
+    def load_environment_secrets
+      json_content = fetch_secrets
+      secrets = JSON.parse(json_content)
+
+      secrets.each { |key, value| ENV[key] = value.to_s }
+
+      message = "✅ Secrets loaded from 1Password for #{Rails.env}"
+      Rails.env.development? ? puts(message) : Rails.logger.info(message)
+    rescue JSON::ParserError => e
+      error = "Failed to parse secrets: #{e.message}"
+      Rails.env.development? ? puts(error) : Rails.logger.error(error)
+      raise
+    end
+
+    def fetch_secrets
+      app_name = Rails.application.class.module_parent_name.downcase
+      note_title = "env.#{app_name}.#{Rails.env}"
+
+      # The note title is crucial - it must match exactly
+      result = `op item get "#{note_title}" --field notesPlain`.strip
+      raise "Failed to fetch secrets for #{note_title}" if result.empty?
+      result
+    end
+  end
+end
+```
+
+Add this to your application configuration:
+
+```ruby
+# config/application.rb
+module YourApp
+  class Application < Rails::Application
+    # ... other configuration ...
+
+    # Load secrets early in the boot process
+    config.before_configuration do
+      SecretsManager.load_secrets
+    end
+  end
+end
+```
+
+This unified approach has several advantages:
+
+- Single source of truth for secret management
+- Consistent behavior across environments
+- Environment-appropriate authentication
+- Simpler maintenance and updates
+- Clear logging appropriate to each environment
 
 First, install the 1Password CLI:
 
@@ -101,15 +212,11 @@ brew install 1password-cli
 
 # Ubuntu/Debian
 curl -sS https://downloads.1password.com/linux/keys/1password.asc | \
-sudo gpg --dearmor --output /usr/share/keyrings/1password-archive-keyring.gpg && \
+sudo gpg --dearmor --output /usr/share/keyrings/1password-archive-keyring.gpg
+
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/$(dpkg --print-architecture) stable main" | \
-sudo tee /etc/apt/sources.list.d/1password.list && \
-sudo mkdir -p /etc/debsig/policies/AC2D62742012EA22/ && \
-curl -sS https://downloads.1password.com/linux/debian/debsig/1password.pol | \
-sudo tee /etc/debsig/policies/AC2D62742012EA22/1password.pol && \
-sudo mkdir -p /usr/share/debsig/keyrings/AC2D62742012EA22 && \
-curl -sS https://downloads.1password.com/linux/keys/1password.asc | \
-sudo gpg --dearmor --output /usr/share/debsig/keyrings/AC2D62742012EA22/debsig.gpg && \
+sudo tee /etc/apt/sources.list.d/1password.list
+
 sudo apt update && sudo apt install 1password-cli
 ```
 
