@@ -31,11 +31,12 @@ How it works:
 
 ```bash
 # Initial signin - this will prompt you interactively
-op signin my-team.1password.com email@example.com
+op signin my.1password.com email@example.com
 
 # The CLI will ask for:
 # - Your secret key (A3-...)
 # - Your master password
+# - If you use a different URL for work use that here
 
 # The signin creates a temporary session token that expires after 30 minutes
 # This is why you often see this command:
