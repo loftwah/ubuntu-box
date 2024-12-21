@@ -348,9 +348,20 @@ resource "aws_iam_role_policy" "ecs_execution_role_policy" {
 }
 ```
 
-### 6. Testing Support
+### 6. Testing Strategy
 
-Add helpers for testing code that depends on secrets:
+Our secrets manager intentionally skips loading secrets in the test environment. This is a deliberate design choice that makes our tests more reliable and maintainable. Instead of loading real secrets from 1Password, we use a mocking approach that gives us complete control over our test environment.
+
+When we look at our `SecretsManager`, the first line sets this up:
+
+```ruby
+def load_secrets
+  return if Rails.env.test?  # Skip loading from 1Password in tests
+  # ... rest of the implementation
+end
+```
+
+This design lets us explicitly control what secrets are available during our tests. To support this, we implement a testing helper:
 
 ```ruby
 # spec/support/secrets_helper.rb
@@ -370,17 +381,64 @@ RSpec.configure do |config|
 end
 ```
 
-Use in your tests:
+This approach provides several important benefits for testing:
+
+First, it makes our tests isolated and reliable. Each test runs in a clean environment without depending on external services or the state of your 1Password vault. For example:
 
 ```ruby
-RSpec.describe "API client" do
-  it "authenticates with the API" do
-    with_secrets("API_KEY" => "test_key") do
-      expect(APIClient.new.authenticate).to be_successful
+RSpec.describe PaymentProcessor do
+  it "processes payments with the correct API key" do
+    with_secrets("STRIPE_API_KEY" => "test_key_123") do
+      processor = PaymentProcessor.new
+      expect(processor).to be_configured
+    end
+  end
+
+  it "raises an error when API key is missing" do
+    with_secrets({}) do  # Explicitly testing with no secrets
+      expect {
+        PaymentProcessor.new
+      }.to raise_error(MissingAPIKeyError)
     end
   end
 end
 ```
+
+Second, it makes our tests deterministic and controllable. We can test various scenarios by providing different combinations of secrets:
+
+```ruby
+RSpec.describe AWSService do
+  it "handles incomplete credentials properly" do
+    # Test with partial credentials
+    with_secrets(
+      "AWS_ACCESS_KEY_ID" => "test_key",
+      # Deliberately omitting AWS_SECRET_ACCESS_KEY
+    ) do
+      expect {
+        AWSService.new
+      }.to raise_error(IncompleteCredentialsError)
+    end
+  end
+
+  it "works with complete credentials" do
+    # Test with all required credentials
+    with_secrets(
+      "AWS_ACCESS_KEY_ID" => "test_key",
+      "AWS_SECRET_ACCESS_KEY" => "test_secret"
+    ) do
+      expect(AWSService.new).to be_properly_configured
+    end
+  end
+end
+```
+
+This testing strategy aligns with Rails testing best practices by:
+
+- Keeping tests fast (no external service calls)
+- Making tests reliable (no external dependencies)
+- Allowing thorough testing of error conditions
+- Maintaining clear test intentions
+- Supporting parallel test execution
 
 ## Best Practices
 
