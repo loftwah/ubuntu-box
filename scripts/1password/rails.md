@@ -41,7 +41,10 @@ Content (stored in the note's `notesPlain` field):
 {
   "DATABASE_URL": "postgres://user:pass@host:5432/db",
   "REDIS_URL": "redis://localhost:6379/0",
-  "AWS_ACCESS_KEY_ID": "AKIA..."
+  "AWS_ACCESS_KEY_ID": "AKIA...",
+  "STRIPE_API_KEY": "sk_test_...",
+  "SMTP_PASSWORD": "your-smtp-password",
+  "JWT_SECRET": "your-jwt-secret"
 }
 ```
 
@@ -121,7 +124,109 @@ module YourApp
 end
 ```
 
-### 5. AWS Deployment Setup
+### 5. Using Secrets in Your Application
+
+Once the secrets are loaded into the environment variables, you can access them throughout your application. Here are some common patterns for using secrets:
+
+#### Configuration Objects
+
+Create configuration objects to encapsulate related secrets:
+
+```ruby
+# config/initializers/stripe.rb
+Stripe.api_key = ENV.fetch('STRIPE_API_KEY')
+
+# config/initializers/aws.rb
+Aws.config.update({
+  credentials: Aws::Credentials.new(
+    ENV.fetch('AWS_ACCESS_KEY_ID'),
+    ENV.fetch('AWS_SECRET_ACCESS_KEY')
+  ),
+  region: ENV.fetch('AWS_REGION', 'us-east-1')
+})
+
+# config/initializers/smtp_settings.rb
+Rails.application.config.action_mailer.smtp_settings = {
+  address: ENV.fetch('SMTP_SERVER', 'smtp.gmail.com'),
+  port: ENV.fetch('SMTP_PORT', 587),
+  user_name: ENV.fetch('SMTP_USERNAME'),
+  password: ENV.fetch('SMTP_PASSWORD'),
+  authentication: :plain,
+  enable_starttls_auto: true
+}
+```
+
+#### Service Classes
+
+Create service classes that use secrets for external integrations:
+
+```ruby
+# app/services/payment_processor.rb
+class PaymentProcessor
+  def initialize
+    @api_key = ENV.fetch('STRIPE_API_KEY')
+    @webhook_secret = ENV.fetch('STRIPE_WEBHOOK_SECRET')
+  end
+
+  def process_payment(amount, token)
+    Stripe::Charge.create({
+      amount: amount,
+      currency: 'usd',
+      source: token,
+      api_key: @api_key
+    })
+  end
+
+  def verify_webhook(payload, signature)
+    Stripe::Webhook.construct_event(
+      payload, signature, @webhook_secret
+    )
+  end
+end
+
+# app/services/email_service.rb
+class EmailService
+  def initialize
+    @api_key = ENV.fetch('SENDGRID_API_KEY')
+    @from_email = ENV.fetch('SYSTEM_EMAIL_ADDRESS')
+  end
+
+  def send_welcome_email(user)
+    client = SendGrid::Client.new(api_key: @api_key)
+    # ... email sending logic
+  end
+end
+```
+
+#### Models
+
+Use secrets in models when needed (though prefer service classes for external integrations):
+
+```ruby
+# app/models/user.rb
+class User < ApplicationRecord
+  include JWT::Auth
+
+  JWT_SECRET = ENV.fetch('JWT_SECRET')
+
+  def generate_auth_token
+    JWT.encode(
+      { user_id: id, exp: 24.hours.from_now.to_i },
+      JWT_SECRET,
+      'HS256'
+    )
+  end
+
+  def self.from_auth_token(token)
+    decoded = JWT.decode(token, JWT_SECRET, true, algorithm: 'HS256')
+    User.find(decoded.first['user_id'])
+  rescue JWT::DecodeError
+    nil
+  end
+end
+```
+
+### 6. AWS Deployment Setup
 
 Store the service account token in SSM Parameter Store:
 
@@ -163,7 +268,7 @@ resource "aws_iam_role_policy" "ssm_access" {
 }
 ```
 
-### 6. Testing Support
+### 7. Testing Support
 
 Add test helper for mocking secrets:
 
@@ -192,6 +297,19 @@ RSpec.describe PaymentProcessor do
   it "processes payments" do
     with_secrets("STRIPE_API_KEY" => "test_key") do
       expect(PaymentProcessor.new).to be_configured
+    end
+  end
+end
+
+RSpec.describe User do
+  describe "#generate_auth_token" do
+    it "generates a valid JWT token" do
+      with_secrets("JWT_SECRET" => "test_secret") do
+        user = create(:user)
+        token = user.generate_auth_token
+        decoded_user = User.from_auth_token(token)
+        expect(decoded_user).to eq(user)
+      end
     end
   end
 end
@@ -227,3 +345,9 @@ Can't Find Secrets:
 - Check note name matches `env.{app}.{environment}`
 - Verify JSON format is valid
 - Ensure you have access to the vault
+
+Missing Environment Variables:
+
+- Check if SecretsManager loaded successfully during boot
+- Verify the secret exists in 1Password
+- Make sure you're using `ENV.fetch` to catch missing variables early
