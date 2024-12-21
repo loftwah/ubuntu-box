@@ -1,60 +1,14 @@
-# Rails 1Password Integration: A Practical Guide
+# Rails 1Password Integration: The Essential Guide
 
-## Introduction
+This guide explains how to use 1Password to manage environment variables in Rails applications. We use the 1Password CLI instead of Connect because it works with all account types and doesn't require additional infrastructure.
 
-This guide explains how to integrate 1Password with Rails applications using the CLI with service accounts. We deliberately avoid using 1Password Connect since it requires additional infrastructure and is only available for Business/Family accounts. Our approach works with all account types and provides a simpler, more maintainable solution.
+## How It Works
 
-## Core Concepts
+We store environment variables as JSON in 1Password secure notes. Each environment (development, staging, production) has its own note. Developers use their personal 1Password accounts for development, while production uses a service account.
 
-### Authentication Methods
+## Setup Steps
 
-Our implementation uses two authentication methods depending on the environment:
-
-Development environments use personal 1Password accounts:
-
-- Interactive CLI authentication
-- Integrates with the developer's existing 1Password workflow
-- Full access to development secrets
-
-Production and staging environments use service accounts:
-
-- Single token authentication
-- Non-interactive, perfect for automation
-- Restricted access to specific vaults
-
-### Secret Storage Structure
-
-Each environment's secrets are stored in a 1Password secure note with:
-
-1. A name that identifies the environment: `env.{application}.{environment}`
-2. The secrets stored as JSON in the note's content
-
-For example:
-
-Name: `env.myapp.production`
-
-Content:
-
-```json
-{
-  "DATABASE_URL": "postgres://user:pass@host:5432/db",
-  "REDIS_URL": "redis://localhost:6379/0",
-  "AWS_ACCESS_KEY_ID": "AKIA..."
-}
-```
-
-This structure provides:
-
-- Atomic updates (all related secrets updated together)
-- Easy environment variable loading
-- Clear organization by environment
-- Simple secret rotation
-
-## Implementation
-
-### 1. Installing 1Password CLI
-
-First, install the CLI on your development and deployment machines:
+### 1. Install 1Password CLI
 
 ```bash
 # macOS
@@ -74,18 +28,33 @@ sudo gpg --dearmor --output /usr/share/debsig/keyrings/AC2D62742012EA22/debsig.g
 sudo apt update && sudo apt install 1password-cli
 ```
 
-### 2. Setting Up Service Accounts
+### 2. Create 1Password Secure Notes
 
-Create a service account for your production environment:
+Create a secure note for each environment with this structure:
 
-1. Go to Settings → Service Accounts in 1Password
+Name: `env.{application}.{environment}`  
+Example: `env.myapp.production`
+
+Content (stored in the note's `notesPlain` field):
+
+```json
+{
+  "DATABASE_URL": "postgres://user:pass@host:5432/db",
+  "REDIS_URL": "redis://localhost:6379/0",
+  "AWS_ACCESS_KEY_ID": "AKIA..."
+}
+```
+
+### 3. Create Service Account
+
+For production/staging environments:
+
+1. Go to Settings → Service Accounts
 2. Create a new account (e.g., "myapp-production")
-3. Grant access only to the necessary vaults
-4. Save the token (it starts with "eyJ")
+3. Grant access to only the necessary vaults
+4. Save the token (starts with "eyJ")
 
-### 3. Implementing the Secrets Manager
-
-Create a single, environment-aware secrets manager that handles both development and production:
+### 4. Implement Secrets Manager
 
 ```ruby
 # app/services/secrets_manager.rb
@@ -138,7 +107,7 @@ class SecretsManager
 end
 ```
 
-Load the secrets early in your application's boot process:
+Add to your application configuration:
 
 ```ruby
 # config/application.rb
@@ -152,104 +121,9 @@ module YourApp
 end
 ```
 
-### 4. Secret Rotation with Sidekiq
+### 5. AWS Deployment Setup
 
-Implement automated secret rotation:
-
-```ruby
-# app/jobs/secret_rotation_job.rb
-class SecretRotationJob
-  include Sidekiq::Job
-
-  sidekiq_options retry: 3, backtrace: true
-
-  recurrence { daily.hour_of_day(3) }  # Runs at 3 AM daily
-
-  def perform(secret_key = nil)
-    return rotate_all_secrets if secret_key.nil?
-    rotate_single_secret(secret_key)
-  end
-
-  private
-
-  def rotate_all_secrets
-    scheduled_rotations.each do |secret_key|
-      rotate_single_secret(secret_key)
-    rescue => e
-      Rails.logger.error "Failed to rotate #{secret_key}: #{e.message}"
-      notify_team_of_failure(secret_key, e)
-    end
-  end
-
-  def rotate_single_secret(secret_key)
-    Rails.logger.info "Starting rotation for #{secret_key}"
-
-    # Fetch current secrets
-    json_content = fetch_current_secrets
-    current_secrets = JSON.parse(json_content)
-
-    # Generate and test new secret
-    new_value = generate_new_secret(secret_key)
-    test_new_secret(secret_key, new_value)
-
-    # Update atomically
-    updated_secrets = current_secrets.merge(secret_key => new_value)
-    store_updated_secrets(updated_secrets)
-
-    record_rotation(secret_key)
-    notify_team_of_success(secret_key)
-  end
-
-  def fetch_current_secrets
-    `op item get "env.#{app_name}.#{Rails.env}" --field notesPlain`.strip
-  end
-
-  def store_updated_secrets(secrets)
-    command = %(op item edit "env.#{app_name}.#{Rails.env}" notesPlain='#{secrets.to_json}')
-    raise "Failed to store secrets" unless system(command)
-  end
-
-  def scheduled_rotations
-    {
-      'DATABASE_PASSWORD' => 90.days,
-      'API_KEY' => 30.days,
-      'JWT_SECRET' => 60.days
-    }.select do |key, interval|
-      last_rotation = SecretRotationLog.where(key: key).last
-      last_rotation.nil? || last_rotation.created_at < interval.ago
-    end.keys
-  end
-
-  def generate_new_secret(key)
-    case key
-    when 'DATABASE_PASSWORD'
-      SecureRandom.hex(32)
-    when 'API_KEY'
-      "sk_#{SecureRandom.hex(24)}"
-    else
-      SecureRandom.hex(32)
-    end
-  end
-
-  def test_new_secret(key, value)
-    case key
-    when 'DATABASE_PASSWORD'
-      test_database_connection(value)
-    when 'API_KEY'
-      test_api_connection(value)
-    end
-  end
-end
-
-# app/models/secret_rotation_log.rb
-class SecretRotationLog < ApplicationRecord
-  validates :key, presence: true
-end
-```
-
-### 5. AWS Integration
-
-Store the service account token securely in SSM Parameter Store:
+Store the service account token in SSM Parameter Store:
 
 ```hcl
 # terraform/ssm.tf
@@ -265,10 +139,10 @@ resource "aws_ssm_parameter" "op_service_account_token" {
   }
 }
 
-# Allow EC2 to read the parameter
-resource "aws_iam_role_policy" "ec2_ssm" {
-  name = "ec2-ssm-parameter-access"
-  role = aws_iam_role.ec2_role.id
+# Allow EC2/ECS to read the parameter
+resource "aws_iam_role_policy" "ssm_access" {
+  name = "ssm-parameter-access"
+  role = aws_iam_role.app_role.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -276,66 +150,7 @@ resource "aws_iam_role_policy" "ec2_ssm" {
       {
         Effect = "Allow"
         Action = [
-          "ssm:GetParameter"
-        ]
-        Resource = [
-          aws_ssm_parameter.op_service_account_token.arn
-        ]
-      }
-    ]
-  })
-}
-```
-
-For ECS tasks:
-
-```hcl
-# terraform/ecs.tf
-resource "aws_ecs_task_definition" "app" {
-  family                   = "myapp-${var.environment}"
-  requires_compatibilities = ["FARGATE"]
-  network_mode            = "awsvpc"
-  cpu                     = 256
-  memory                  = 512
-  execution_role_arn      = aws_iam_role.ecs_execution_role.arn
-  task_role_arn           = aws_iam_role.ecs_task_role.arn
-
-  container_definitions = jsonencode([
-    {
-      name  = "myapp"
-      image = "${var.ecr_repository_url}:${var.image_tag}"
-
-      secrets = [
-        {
-          name      = "OP_SERVICE_ACCOUNT_TOKEN"
-          valueFrom = aws_ssm_parameter.op_service_account_token.arn
-        }
-      ]
-
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          "awslogs-group"         = "/ecs/myapp-${var.environment}"
-          "awslogs-region"        = var.aws_region
-          "awslogs-stream-prefix" = "ecs"
-        }
-      }
-    }
-  ])
-}
-
-# Allow task execution role to read the parameter
-resource "aws_iam_role_policy" "ecs_execution_role_policy" {
-  name = "parameter-store-access"
-  role = aws_iam_role.ecs_execution_role.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "ssm:GetParameters",
+          "ssm:GetParameter",
           "kms:Decrypt"
         ]
         Resource = [
@@ -348,20 +163,9 @@ resource "aws_iam_role_policy" "ecs_execution_role_policy" {
 }
 ```
 
-### 6. Testing Strategy
+### 6. Testing Support
 
-Our secrets manager intentionally skips loading secrets in the test environment. This is a deliberate design choice that makes our tests more reliable and maintainable. Instead of loading real secrets from 1Password, we use a mocking approach that gives us complete control over our test environment.
-
-When we look at our `SecretsManager`, the first line sets this up:
-
-```ruby
-def load_secrets
-  return if Rails.env.test?  # Skip loading from 1Password in tests
-  # ... rest of the implementation
-end
-```
-
-This design lets us explicitly control what secrets are available during our tests. To support this, we implement a testing helper:
+Add test helper for mocking secrets:
 
 ```ruby
 # spec/support/secrets_helper.rb
@@ -381,113 +185,45 @@ RSpec.configure do |config|
 end
 ```
 
-This approach provides several important benefits for testing:
-
-First, it makes our tests isolated and reliable. Each test runs in a clean environment without depending on external services or the state of your 1Password vault. For example:
+Use in tests:
 
 ```ruby
 RSpec.describe PaymentProcessor do
-  it "processes payments with the correct API key" do
-    with_secrets("STRIPE_API_KEY" => "test_key_123") do
-      processor = PaymentProcessor.new
-      expect(processor).to be_configured
-    end
-  end
-
-  it "raises an error when API key is missing" do
-    with_secrets({}) do  # Explicitly testing with no secrets
-      expect {
-        PaymentProcessor.new
-      }.to raise_error(MissingAPIKeyError)
+  it "processes payments" do
+    with_secrets("STRIPE_API_KEY" => "test_key") do
+      expect(PaymentProcessor.new).to be_configured
     end
   end
 end
 ```
 
-Second, it makes our tests deterministic and controllable. We can test various scenarios by providing different combinations of secrets:
+## Day-to-Day Usage
 
-```ruby
-RSpec.describe AWSService do
-  it "handles incomplete credentials properly" do
-    # Test with partial credentials
-    with_secrets(
-      "AWS_ACCESS_KEY_ID" => "test_key",
-      # Deliberately omitting AWS_SECRET_ACCESS_KEY
-    ) do
-      expect {
-        AWSService.new
-      }.to raise_error(IncompleteCredentialsError)
-    end
-  end
+Development workflow:
 
-  it "works with complete credentials" do
-    # Test with all required credentials
-    with_secrets(
-      "AWS_ACCESS_KEY_ID" => "test_key",
-      "AWS_SECRET_ACCESS_KEY" => "test_secret"
-    ) do
-      expect(AWSService.new).to be_properly_configured
-    end
-  end
-end
+```bash
+# Start of day
+op signin
+rails server
+
+# View current secrets
+op item get env.myapp.development --field notesPlain
+
+# Update secrets
+op item edit env.myapp.development notesPlain="$(cat new_env.json)"
 ```
-
-This testing strategy aligns with Rails testing best practices by:
-
-- Keeping tests fast (no external service calls)
-- Making tests reliable (no external dependencies)
-- Allowing thorough testing of error conditions
-- Maintaining clear test intentions
-- Supporting parallel test execution
-
-## Best Practices
-
-### Security
-
-- Use separate vaults per environment
-- Grant minimal vault access to service accounts
-- Rotate secrets and service account tokens regularly
-- Never share development and production secrets
-
-### Operations
-
-- Monitor secret access in logs
-- Set up alerts for rotation failures
-- Document emergency procedures
-- Maintain clear rotation schedules
 
 ## Troubleshooting
 
-Common issues and solutions:
+Common issues:
 
-Authentication Problems:
+Authentication Failed:
 
-```
-Error: Failed to authenticate
-```
+- For development: Run `op signin`
+- For production: Check `OP_SERVICE_ACCOUNT_TOKEN` is set
 
-- Check service account token is set
-- Verify token permissions
-- Ensure CLI is installed correctly
+Can't Find Secrets:
 
-Secret Loading Failures:
-
-```
-Error: Failed to fetch secrets
-```
-
-- Verify note name matches expected format
-- Check JSON is valid
-- Confirm CLI authentication status
-
-## Conclusion
-
-This implementation provides:
-
-- Simple secret management without extra services
-- Clear separation between environments
-- Easy secret rotation
-- Secure deployment options
-- Good developer experience
-
-While secrets require an application restart to update, this tradeoff brings significant benefits in simplicity and reliability compared to real-time secret fetching or running additional infrastructure like Connect.
+- Check note name matches `env.{app}.{environment}`
+- Verify JSON format is valid
+- Ensure you have access to the vault
