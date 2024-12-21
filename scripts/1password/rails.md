@@ -13,20 +13,17 @@ Understanding why we're using the CLI with service accounts rather than 1Passwor
 The CLI with service accounts offers several benefits that make it the preferred choice for most Rails applications:
 
 1. Universal Accessibility
-
    - Works with all 1Password account types (Personal, Family, Teams, Business)
    - Doesn't require a paid Business or Family account like Connect does
    - Enables individual developers to use it in their personal projects
 
 2. Simplified Architecture
-
    - No additional services to maintain
    - Direct communication with 1Password's servers
    - Fewer points of failure
    - Less operational overhead
 
 3. Reduced Infrastructure Costs
-
    - No need to run and monitor Connect servers
    - No additional compute resources required
    - Lower operational complexity
@@ -54,14 +51,12 @@ However, for the vast majority of Rails applications, these requirements are unn
 ### Authentication Methods
 
 For development environments, developers use their personal 1Password accounts. This provides:
-
 - Full access to development secrets
 - Interactive authentication
 - Familiar interface through the CLI
 - Integration with the 1Password desktop app
 
 For staging, production, and automated environments, we use service accounts. These provide:
-
 - Non-interactive authentication
 - Single token authentication
 - Perfect for CI/CD and automated processes
@@ -77,14 +72,12 @@ In 1Password, we store our secrets as secure notes where each note has two essen
 For example, a secure note would be structured like this:
 
 Name: `env.myapp.production`
-
 ```ruby
 # This is how we'll retrieve it in our code:
 op item get "env.myapp.production" --field notesPlain
 ```
 
 Content (stored in the note's `notesPlain` field):
-
 ```json
 {
   "DATABASE_URL": "postgres://user:pass@host:5432/db",
@@ -94,26 +87,23 @@ Content (stored in the note's `notesPlain` field):
 ```
 
 The naming convention `env.{application}.{environment}` is crucial because:
-
 1. It's how we locate our secrets using the CLI
 2. It provides a consistent pattern across environments
 3. It makes automation and secret rotation reliable
 4. It helps prevent accessing the wrong environment's secrets
 
 For example, you might have these secure notes:
-
 - `env.myapp.development` - Local development secrets
 - `env.myapp.staging` - Staging environment secrets
 - `env.myapp.production` - Production environment secrets
 - `env.otherapp.production` - Another application's production secrets
 
 When retrieving secrets, the name must match exactly:
-
 ```ruby
 def fetch_secrets
   app_name = Rails.application.class.module_parent_name.downcase
   note_name = "env.#{app_name}.#{Rails.env}"  # This must match the secure note's name exactly
-
+  
   result = `op item get "#{note_name}" --field notesPlain`.strip
   if result.empty?
     raise "Failed to fetch secrets: Could not find secure note named '#{note_name}'"
@@ -134,7 +124,7 @@ class SecretsManager
   class << self
     def load_secrets
       return if Rails.env.test?  # Skip for test environment
-
+      
       ensure_authentication
       load_environment_secrets
     end
@@ -156,9 +146,9 @@ class SecretsManager
     def load_environment_secrets
       json_content = fetch_secrets
       secrets = JSON.parse(json_content)
-
+      
       secrets.each { |key, value| ENV[key] = value.to_s }
-
+      
       message = "✅ Secrets loaded from 1Password for #{Rails.env}"
       Rails.env.development? ? puts(message) : Rails.logger.info(message)
     rescue JSON::ParserError => e
@@ -170,7 +160,7 @@ class SecretsManager
     def fetch_secrets
       app_name = Rails.application.class.module_parent_name.downcase
       note_title = "env.#{app_name}.#{Rails.env}"
-
+      
       # The note title is crucial - it must match exactly
       result = `op item get "#{note_title}" --field notesPlain`.strip
       raise "Failed to fetch secrets for #{note_title}" if result.empty?
@@ -197,7 +187,6 @@ end
 ```
 
 This unified approach has several advantages:
-
 - Single source of truth for secret management
 - Consistent behavior across environments
 - Environment-appropriate authentication
@@ -251,7 +240,7 @@ class DevelopmentSecrets
       json_content = fetch_secrets
       secrets = JSON.parse(json_content)
       secrets.each { |key, value| ENV[key] = value.to_s }
-
+      
       puts "✅ Development secrets loaded from 1Password"
     rescue JSON::ParserError => e
       puts "❌ Error parsing secrets: #{e.message}"
@@ -261,7 +250,7 @@ class DevelopmentSecrets
     def fetch_secrets
       app_name = Rails.application.class.module_parent_name.downcase
       result = `op item get "env.#{app_name}.development" --field notesPlain`.strip
-
+      
       raise "Failed to fetch secrets" if result.empty?
       result
     end
@@ -283,7 +272,6 @@ end
 ### 2. Production Environment Setup
 
 Create a service account in 1Password:
-
 1. Go to Settings → Service Accounts
 2. Create new service account (e.g., "myapp-production")
 3. Grant access only to necessary vaults
@@ -297,7 +285,7 @@ class SecretsManager
   class << self
     def load_secrets
       return if Rails.env.test? || Rails.env.development?
-
+      
       ensure_service_account_configured
       load_environment_secrets
     end
@@ -312,9 +300,9 @@ class SecretsManager
     def load_environment_secrets
       json_content = fetch_secrets
       secrets = JSON.parse(json_content)
-
+      
       secrets.each { |key, value| ENV[key] = value.to_s }
-
+      
       Rails.logger.info "Secrets loaded from 1Password"
     rescue JSON::ParserError => e
       Rails.logger.error "Failed to parse secrets: #{e.message}"
@@ -327,7 +315,7 @@ class SecretsManager
     def fetch_secrets
       app_name = Rails.application.class.module_parent_name.downcase
       env_name = Rails.env
-
+      
       result = `op item get "env.#{app_name}.#{env_name}" --field notesPlain`.strip
       raise "Failed to fetch secrets" if result.empty?
       result
@@ -353,23 +341,23 @@ Create a secrets management system with automated rotation:
 # app/jobs/secret_rotation_job.rb
 class SecretRotationJob
   include Sidekiq::Job
-
+  
   # Configure retry behavior for robustness
   sidekiq_options retry: 3, backtrace: true
-
+  
   # Schedule format examples:
   # every day at 3am: '0 3 * * *'
   # every Sunday at 2am: '0 2 * * 0'
   # every first of the month: '0 0 1 * *'
   recurrence { daily.hour_of_day(3) }  # Runs every day at 3 AM
-
+  
   def perform(secret_key = nil)
     return rotate_all_secrets if secret_key.nil?
     rotate_single_secret(secret_key)
   end
-
+  
   private
-
+  
   def rotate_all_secrets
     scheduled_rotations.each do |secret_key|
       rotate_single_secret(secret_key)
@@ -378,36 +366,36 @@ class SecretRotationJob
       notify_team_of_failure(secret_key, e)
     end
   end
-
+  
   def rotate_single_secret(secret_key)
     Rails.logger.info "Starting rotation for #{secret_key}"
-
+    
     # Fetch current secrets
     current_secrets = fetch_current_secrets
-
+    
     # Generate and test new secret
     new_value = generate_new_secret(secret_key)
     test_new_secret(secret_key, new_value)
-
+    
     # Update secrets atomically
     updated_secrets = current_secrets.merge(secret_key => new_value)
     store_secrets(updated_secrets)
-
+    
     # Notify team and record rotation
     record_rotation(secret_key)
     notify_team_of_success(secret_key)
   end
-
+  
   def fetch_current_secrets
     json_content = `op item get "env.#{app_name}.#{Rails.env}" --field notesPlain`.strip
     JSON.parse(json_content)
   end
-
+  
   def store_secrets(secrets)
     command = %(op item edit "env.#{app_name}.#{Rails.env}" notesPlain='#{secrets.to_json}')
     raise "Failed to store secrets" unless system(command)
   end
-
+  
   def scheduled_rotations
     # Define which secrets need regular rotation and their schedules
     {
@@ -419,7 +407,7 @@ class SecretRotationJob
       last_rotation.nil? || last_rotation.created_at < interval.ago
     end.keys
   end
-
+  
   def generate_new_secret(key)
     case key
     when 'DATABASE_PASSWORD'
@@ -430,7 +418,7 @@ class SecretRotationJob
       SecureRandom.hex(32)
     end
   end
-
+  
   def test_new_secret(key, value)
     # Implement secret testing logic
     # For example, try connecting to database with new credentials
@@ -446,7 +434,7 @@ end
 # app/models/secret_rotation_log.rb
 class SecretRotationLog < ApplicationRecord
   validates :key, presence: true
-
+  
   def self.record_rotation(key)
     create!(
       key: key,
@@ -461,7 +449,7 @@ namespace :secrets do
   desc "Create or update environment secrets in 1Password"
   task :update, [:environment] => :environment do |t, args|
     env = args[:environment] || Rails.env
-
+    
     unless system('op user get --me > /dev/null 2>&1')
       puts "Please sign in to 1Password CLI first:"
       system('op signin')
@@ -615,7 +603,7 @@ For ECS deployments, we need additional resources for the task execution:
 # ECS Cluster
 resource "aws_ecs_cluster" "main" {
   name = "myapp-${var.environment}"
-
+  
   setting {
     name  = "containerInsights"
     value = "enabled"
@@ -677,7 +665,7 @@ resource "aws_ecs_task_definition" "app" {
     {
       name  = "myapp"
       image = "${var.ecr_repository_url}:${var.image_tag}"
-
+      
       secrets = [
         {
           name      = "OP_SERVICE_ACCOUNT_TOKEN"
@@ -771,7 +759,7 @@ resource "aws_ecs_task_definition" "sidekiq" {
       name  = "sidekiq"
       image = "${var.ecr_repository_url}:${var.image_tag}"
       command = ["bundle", "exec", "sidekiq"]
-
+      
       secrets = [
         {
           name      = "OP_SERVICE_ACCOUNT_TOKEN"
@@ -831,13 +819,11 @@ end
 ### Security
 
 1. Environment Separation
-
    - Use separate vaults for development and production
    - Use different service accounts for staging and production
    - Never mix environment secrets
 
 2. Access Control
-
    - Grant minimal vault access to service accounts
    - Regularly audit access permissions
    - Rotate service account tokens periodically
@@ -850,14 +836,12 @@ end
 ### Operations
 
 1. Secret Rotation
-
    - Schedule regular rotation for critical secrets
    - Document rotation procedures
    - Test applications with rotated secrets
    - Coordinate rotation with deployments
 
 2. Monitoring
-
    - Log secret load attempts
    - Monitor secret access patterns
    - Alert on authentication failures
@@ -874,21 +858,17 @@ end
 ### Common Issues
 
 1. Authentication Problems
-
    ```
    Error: failed to authenticate with 1Password Connect server
    ```
-
    - Check service account token is set
    - Verify token hasn't expired
    - Ensure token has correct permissions
 
 2. Secret Loading Failures
-
    ```
    Error: Failed to fetch secrets
    ```
-
    - Check item exists in 1Password
    - Verify JSON format is correct
    - Ensure CLI is authenticated
@@ -904,7 +884,6 @@ end
 ## Conclusion
 
 This approach to Rails secret management with 1Password provides:
-
 - Simple, reliable secret storage
 - Easy development workflow
 - Secure production deployments
