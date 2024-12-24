@@ -370,6 +370,56 @@ data:
   token: <base64-encoded-token>
 ```
 
+## Adding Scripts to Your PATH
+
+To make the 1Password environment management scripts accessible from any directory, you can add them to your system's PATH.
+
+### Steps to Add Scripts to PATH
+
+1. **Move or Link the Scripts to a Dedicated Directory**  
+   Choose a directory for custom scripts, such as `~/bin` or `/usr/local/bin`. For example:
+   ```bash
+   mkdir -p ~/bin
+   cp ../ubuntu-box/scripts/1password/* ~/bin/
+   ```
+
+   Alternatively, create symbolic links:
+   ```bash
+   mkdir -p ~/bin
+   ln -s $(pwd)/../ubuntu-box/scripts/1password/* ~/bin/
+   ```
+
+2. **Add the Directory to Your PATH**  
+   Update your shell configuration file (`~/.bashrc`, `~/.zshrc`, or `~/.profile`) to include the `~/bin` directory in your PATH:
+   ```bash
+   echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
+   ```
+
+   For `zsh`:
+   ```bash
+   echo 'export PATH="$HOME/bin:$PATH"' >> ~/.zshrc
+   ```
+
+   Apply the changes:
+   ```bash
+   source ~/.bashrc  # or source ~/.zshrc
+   ```
+
+3. **Test the Setup**  
+   Verify that the scripts are accessible:
+   ```bash
+   store-env-to-op.sh --help
+   retrieve-env-from-op.sh --help
+   ```
+
+   If the commands work without specifying the full path, the setup is complete.
+
+### Benefits of Adding to PATH
+
+- **Convenience**: Run the scripts from any directory without navigating to their location.
+- **Clarity**: Shorter, cleaner commands.
+- **Efficiency**: Saves time during development and troubleshooting.
+
 ## Troubleshooting
 
 ### Service Account Authentication
