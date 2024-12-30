@@ -1,0 +1,14 @@
+source "https://rubygems.org"
+
+gem "httparty"      # For making HTTP requests
+gem "nokogiri"      # For parsing HTML
+gem "json"          # For JSON handling (usually included in Ruby standard library)
+gem "fileutils"     # For file operations (usually included in Ruby standard library)
+
+group :development, :test do
+  gem "rspec"       # For testing
+  gem "webmock"     # For mocking HTTP requests in tests
+  gem "vcr"         # For recording and replaying HTTP interactions
+  gem "rubocop"     # For code style checking
+  gem "pry"         # For debugging
+end
