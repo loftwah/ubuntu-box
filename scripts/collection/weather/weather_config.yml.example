@@ -1,0 +1,30 @@
+# Example weather configuration file
+# Rename to .weather_config.yml and place in your home directory
+# or specify custom location with -c option
+
+# Your OpenWeather API key (can also be set via OPENWEATHER_API_KEY env variable)
+api_key: your_api_key_here
+
+# Default location if none specified (can be overridden by DEFAULT_LOCATION env variable)
+default_location: Melbourne,AU
+
+# List of favorite locations
+locations:
+  - name: Melbourne
+    country: AU
+    lat: -37.8136
+    lon: 144.9631
+  - name: Sydney
+    country: AU
+    lat: -33.8688
+    lon: 151.2093
+  - name: Brisbane
+    country: AU
+    lat: -27.4698
+    lon: 153.0251
+
+# Display preferences
+units: metric  # metric or imperial
+language: en  # en, es, fr, etc.
+temperature_format: celsius  # celsius or fahrenheit
+wind_speed: ms  # ms (meters/second), kmh, or mph

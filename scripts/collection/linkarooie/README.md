@@ -31,7 +31,7 @@ A Ruby script for scraping and analyzing Linkarooie analytics pages. Outputs dat
 ```bash
 # Clone the repository
 git clone git@github.com:loftwah/ubuntu-box.git
-cd ubuntu-box/scripts/collection
+cd ubuntu-box/scripts/collection/linkarooie
 
 # Install dependencies
 bundle install
