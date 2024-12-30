@@ -169,14 +169,14 @@ class LinkarooieAnalytics
   private
 
   def output_json(data)
-    json_file = File.join(@report_dir, "#{Time.now.strftime('%Y%m%d')}_analytics.json")
+    json_file = File.join(@report_dir, "#{Time.now.strftime('%Y%m%d')}_#{@username}_analytics.json")
     File.write(json_file, JSON.pretty_generate(data))
     { json_path: json_file, data: data }
   end
-
+  
   def output_markdown(data)
     markdown = generate_markdown_report(data)
-    md_file = File.join(@report_dir, "#{Time.now.strftime('%Y%m%d')}_analytics.md")
+    md_file = File.join(@report_dir, "#{Time.now.strftime('%Y%m%d')}_#{@username}_analytics.md")
     File.write(md_file, markdown)
     { markdown_path: md_file, data: data }
   end
