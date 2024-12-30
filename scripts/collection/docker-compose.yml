@@ -1,0 +1,7 @@
+# docker-compose.yml
+services:
+  linkarooie:
+    build: .
+    volumes:
+      - .:/usr/src/app
+    command: bundle exec ruby linkarooie_analytics.rb
