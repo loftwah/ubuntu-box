@@ -52,28 +52,34 @@ The Google Workspace Activity Tracker is a Ruby application that monitors, analy
 
 ```mermaid
 flowchart LR
-    A[Grape API Layer] <--> B[Background Jobs (Sidekiq)]
-    A --> C[Service Layer<br>Gmail/Calendar/Drive Integration]
-    B --> E[Storage Layer<br>SQLite, DO Spaces, Google Drive]
+    A[Grape API Layer]
+    B[Background Jobs Sidekiq]
+    C[Service Layer: Gmail/Calendar/Drive Integration]
+    D[Report Generator]
+    E[Storage Layer: SQLite, DO Spaces, Google Drive]
+    
+    A --> B
+    A --> C
+    C --> D
     C --> E
-    C --> D[Report Generator]
+    B --> E
     D --> E
 
     subgraph API
-    A
+        A
     end
 
     subgraph Workers
-    B
+        B
     end
 
     subgraph Logic
-    C
-    D
+        C
+        D
     end
 
     subgraph Data
-    E
+        E
     end
 ```
 
