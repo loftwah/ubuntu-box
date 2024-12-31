@@ -102,7 +102,6 @@ flowchart LR
 
 - SQLite for structured data (events, emails, file operations, parsed PDF data).
 - DigitalOcean Spaces or Google Drive for file storage.
-- For better performance and concurrency, consider PostgreSQL in production.
 
 ### 3.5 Report Generator
 
@@ -397,9 +396,10 @@ SPACES_REGION=syd1
 
 ## 11. Deployment Notes
 
-- You can deploy to DigitalOcean using App Platform, Managed Redis, and Spaces (set to `syd1`).
-- Consider using PostgreSQL in production.
-- Automate database backups (for example, via cron jobs or scheduled tasks).
+* Deploy the application on a DigitalOcean Droplet in the `syd1` region (closest to Melbourne) for lower latency and better performance.
+* Install Redis directly on the Droplet to simplify architecture and reduce costs. Vertically scale the Droplet as needed to handle increased workload.
+* Use DigitalOcean Spaces in the `syd1` region for file storage, such as reports and PDF attachments. Configure Spaces credentials in the `.env` file.
+* Automate database backups using cron jobs or scheduled tasks to ensure data integrity.
 
 ---
 
