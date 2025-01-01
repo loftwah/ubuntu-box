@@ -39,3 +39,5 @@ terraform.rc
 repomix-output.txt
 .env
 weather_config.yml
+
+node_modules/
