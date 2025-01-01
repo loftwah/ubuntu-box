@@ -17,11 +17,11 @@ async function main() {
       .sort((a, b) => (b.followers || 0) - (a.followers || 0)); // Sort by followers in descending order
 
     // Select the top 25 CEOs
-    const top25CEOs = sortedCEOs.slice(0, 25);
+    const top50CEOs = sortedCEOs.slice(0, 50);
 
     // Output the top 25 CEOs in a readable format
-    console.log("Top 25 CEOs:\n");
-    top25CEOs.forEach((ceo, index) => {
+    console.log("Top 50 CEOs:\n");
+    top50CEOs.forEach((ceo, index) => {
       console.log(
         `${index + 1}. ${ceo.name} (@${ceo.screenName})\n   Followers: ${ceo.followers}\n   Twitter: ${ceo.twitter}\n   Image: ${ceo.imagePath || "No image"}\n`
       );
