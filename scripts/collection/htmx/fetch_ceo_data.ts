@@ -1,6 +1,6 @@
 import { readFile, mkdir, writeFile } from 'fs/promises';
-import fetch from 'node-fetch'; // Bun has native fetch, no need to install
 import { existsSync } from 'fs';
+import fetch from 'node-fetch'; // Bun has native fetch
 import dotenv from 'dotenv';
 
 // Load environment variables
@@ -20,8 +20,8 @@ async function ensureDirectoryExists(directory: string) {
   }
 }
 
-// Fetch the profile image URL from the SocialData API
-async function fetchProfileImageURL(screenName: string): Promise<string | null> {
+// Fetch profile details from the SocialData API
+async function fetchProfileDetails(screenName: string): Promise<{ imageUrl: string | null; followers: number | null }> {
   const url = `https://api.socialdata.tools/twitter/user/${screenName}`;
   try {
     const response = await fetch(url, {
@@ -33,19 +33,25 @@ async function fetchProfileImageURL(screenName: string): Promise<string | null> 
 
     if (response.ok) {
       const data = await response.json();
-      return data.profile_image_url_https.replace("_normal", "_400x400"); // Use high-res image
+      const imageUrl = data.profile_image_url_https?.replace("_normal", "_400x400") || null;
+      const followers = data.followers_count || null;
+      return { imageUrl, followers };
     } else {
       console.error(`Error fetching ${screenName}:`, await response.text());
-      return null;
+      return { imageUrl: null, followers: null };
     }
   } catch (error) {
     console.error(`Failed to fetch data for ${screenName}:`, error);
-    return null;
+    return { imageUrl: null, followers: null };
   }
 }
 
-// Download the image and save it to the images directory
+// Download the image if it doesn't already exist
 async function downloadImage(url: string, filename: string) {
+  if (existsSync(filename)) {
+    console.log(`Image already exists: ${filename}, skipping download.`);
+    return;
+  }
   try {
     const response = await fetch(url);
     if (!response.ok) {
@@ -68,7 +74,9 @@ async function main() {
     // Ensure the images directory exists
     await ensureDirectoryExists("images");
 
-    // Fetch and download images for each CEO
+    const updatedCEOs = [];
+
+    // Process each CEO
     for (const ceo of ceos) {
       const screenName = ceo.twitter.split("/").pop(); // Extract screen name from URL
       if (!screenName) {
@@ -76,14 +84,31 @@ async function main() {
         continue;
       }
 
-      const profileImageURL = await fetchProfileImageURL(screenName);
-      if (profileImageURL) {
-        const filename = `images/${screenName}.jpg`;
-        await downloadImage(profileImageURL, filename);
+      // Fetch profile details (image URL and follower count)
+      const { imageUrl, followers } = await fetchProfileDetails(screenName);
+
+      // If we got an image URL, download the image
+      let imagePath = null;
+      if (imageUrl) {
+        imagePath = `images/${screenName}.jpg`;
+        await downloadImage(imageUrl, imagePath);
       } else {
         console.error(`No profile image found for ${screenName}`);
       }
+
+      // Add metadata to the updated list
+      updatedCEOs.push({
+        name: ceo.name,
+        twitter: ceo.twitter,
+        screenName,
+        followers,
+        imagePath,
+      });
     }
+
+    // Save the updated data to a new JSON file
+    await writeFile("ceos_with_followers.json", JSON.stringify(updatedCEOs, null, 2), "utf-8");
+    console.log("Saved updated CEO data with followers to ceos_with_followers.json");
   } catch (error) {
     console.error("Error:", error);
   }

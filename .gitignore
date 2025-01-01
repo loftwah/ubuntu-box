@@ -41,3 +41,4 @@ repomix-output.txt
 weather_config.yml
 
 node_modules/
+scripts/collection/htmx/images/
