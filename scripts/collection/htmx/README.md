@@ -10,7 +10,7 @@ This directory contains scripts and resources for generating an HTMX CEO tier li
 ├── ceos_with_followers.json    # Enriched data with followers, images, and metadata
 ├── scrape_ceos.ts              # Script to scrape CEO names and Twitter URLs
 ├── fetch_ceo_data.ts           # Script to fetch follower counts and profile images
-├── top_ceos.ts                 # Script to validate and display the top 25 CEOs
+├── top_ceos.ts                 # Script to validate and display the top 50 CEOs
 ├── README.md                   # This documentation file
 ```
 
@@ -55,11 +55,11 @@ This directory contains scripts and resources for generating an HTMX CEO tier li
    **Downloads**: Images saved as `images/<screenName>.jpg`.
 
 3. **Identify Top CEOs**  
-   Use `top_ceos.ts` to validate and display the top 25 CEOs based on follower count.
+   Use `top_ceos.ts` to validate and display the top 50 CEOs based on follower count.
    ```bash
    bun top_ceos.ts
    ```
-   **Output**: The top 25 CEOs are displayed in the console in a readable format:
+   **Output**: The top 50 CEOs are displayed in the console in a readable format:
    ```plaintext
    1. loftwah (@loftwah)
       Followers: 12345
@@ -84,7 +84,7 @@ This directory contains scripts and resources for generating an HTMX CEO tier li
 
 - **images/**: Contains all downloaded Twitter profile images.
 - **ceos_with_followers.json**: Includes enriched data for all CEOs.
-- **Top 25 Selection**: The `top_ceos.ts` script identifies the most-followed CEOs for the tier list.
+- **Top 50 Selection**: The `top_ceos.ts` script identifies the most-followed CEOs for the tier list.
 - **Graceful Handling**: Missing profiles or errors do not stop the scripts.
 
 ---
