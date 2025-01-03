@@ -1,0 +1,33 @@
+services:
+  postgres:
+    image: postgres:latest
+    container_name: postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+
+  redis:
+    image: redis:latest
+    container_name: redis
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: dean@deanlofts.xyz
+      PGADMIN_DEFAULT_PASSWORD: postgres
+    ports:
+      - "8080:80"
+
+  ubuntu:
+    image: ubuntu:latest
+    container_name: ubuntu
+    tty: true
+    stdin_open: true
+    command: sleep infinity
+    volumes:
+      - ./data:/data
+    depends_on:
+      - postgres
+      - redis
