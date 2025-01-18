@@ -15,19 +15,42 @@ def bedrock_invoke(prompt_text)
 
   response = client.invoke_model(
     body: JSON.dump({
-      inputText: prompt_text,
-      textGenerationConfig: {
-        maxTokenCount: 500,
-        temperature: 0.1,
-        topP: 0.9
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              text: prompt_text
+            }
+          ]
+        }
+      ],
+      system: [
+        {
+          text: "You are a helpful AI assistant."
+        }
+      ],
+      inferenceConfig: {
+        temperature: 0.7,
+        topP: 0.9,
+        maxTokens: 300,
+        stopSequences: []
       }
     }),
-    model_id: ENV["BEDROCK_MODEL_ID"] || "amazon.titan-text-express-v1",
+    model_id: ENV["BEDROCK_MODEL_ID"] || "us.amazon.nova-lite-v1:0",
     content_type: "application/json",
     accept: "application/json"
   )
 
-  JSON.parse(response.body.read)["results"][0]["outputText"]
+  # Parse the response
+  parsed_response = JSON.parse(response.body.read)
+  
+  # Get the response text
+  response_text = parsed_response["output"]["message"]["content"].first["text"]
+  puts response_text
+  
+  # Return the response text
+  response_text
 end
 
 # Only run example if file is executed directly
