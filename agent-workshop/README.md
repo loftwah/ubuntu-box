@@ -167,7 +167,7 @@ puts JSON.parse(response.body.read)["results"][0]["outputText"]
 5. **Test Locally**:
 
 ```bash
-ruby main.rb
+ruby app/main.rb
 ```
 
 **Important Notes:**
@@ -260,7 +260,7 @@ This code will give you a real response from Amazon Bedrock. You can modify the 
 2. **Test**:
 
    ```bash
-   ruby -e 'require "./resource_checker"; puts resource_checker({"queryStringParameters"=>{"q"=>"ec2"}}, {})'
+   ruby app/resource_checker.rb
    ```
 
    You should see a real AI summary about your mock instance data.
@@ -311,7 +311,7 @@ This code will give you a real response from Amazon Bedrock. You can modify the 
 
 2. **Test**:
    ```bash
-   ruby -e 'require "./doc_chat_handler"; puts doc_chat_handler({"body"=>"How do I handle on-call escalation?"}, {})'
+   ruby app/doc_chat_handler.rb
    ```
 3. You see an AI output referencing the mock doc text. No real S3 or DB usage.
 
@@ -368,7 +368,7 @@ This code will give you a real response from Amazon Bedrock. You can modify the 
 
 2. **Test**:
    ```bash
-   ruby -e 'require "./usage_agent"; puts usage_agent({"detail"=>{"alarmName"=>"HighMemoryUsage"}}, {})'
+   ruby app/usage_agent.rb
    ```
    You get a real AI explanation, but the alarm data is mock.
 
@@ -535,7 +535,7 @@ This code will give you a real response from Amazon Bedrock. You can modify the 
 
 2. **Test**:
    ```bash
-   ruby -e 'require "./gh_jira_report"; puts gh_jira_report({}, {})'
+   ruby app/gh_jira_report.rb
    ```
 
 ---
@@ -594,7 +594,7 @@ This code will give you a real response from Amazon Bedrock. You can modify the 
 
 2. **Test**:
    ```bash
-   ruby -e 'require "./cost_analysis"; puts cost_analysis_handler({}, {})'
+   ruby app/cost_analysis.rb
    ```
 3. The AI output lists possible cost optimisations. All real calls to Cost Explorer are omitted.
 
@@ -608,7 +608,7 @@ This code will give you a real response from Amazon Bedrock. You can modify the 
 
    ```bash
    for i in {1..20}; do
-     ruby -e 'require "./resource_checker"; resource_checker({"queryStringParameters"=>{"q"=>"ec2"}}, {})'
+     ruby app/resource_checker.rb
    done
    ```
 
