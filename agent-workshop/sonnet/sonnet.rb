@@ -14,7 +14,7 @@ def bedrock_invoke(prompt_text)
   )
 
   response = client.invoke_model(
-    model_id: "arn:aws:bedrock:us-east-1:984601232468:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+    model_id: "arn:aws:bedrock:us-east-1:#{ENV['AWS_ACCOUNT_ID']}:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0",
     content_type: "application/json",
     accept: "application/json",
     body: JSON.dump({
