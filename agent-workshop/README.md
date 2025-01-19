@@ -1,5 +1,7 @@
 # Bedrock AI Ops Assistant
 
+[Nova Request Schema](https://docs.aws.amazon.com/nova/latest/userguide/complete-request-schema.html) | [Claude Request Schema](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic-claude-messages.html)
+
 A **Ruby-based toolkit** for interacting with **AWS Bedrock**. It supports multiple models (e.g. **Claude** and **Nova**) via a **unified interface**, and you can extend it to other models by creating new adapters.
 
 This document explains:
