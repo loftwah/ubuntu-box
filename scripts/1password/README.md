@@ -315,7 +315,6 @@ When using Docker, you'll need to pass the service account token to your contain
 
 ```yaml
 # docker-compose.yml
-version: "3"
 services:
   web:
     build: .
